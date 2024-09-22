@@ -23,7 +23,7 @@ The `trade-producer` service generates trade data and publishes it to a message 
 
 The objective is to develop an end-to-end machine learning system that leverages sophisticated data pipelines to ingest, transform, and load data for model training. This project serves as a foundational element in creating a robust, data-driven environment that supports innovative financial solutions.
 
-
+sdf
 ## Additional Resources
 
 For further documentation and examples, please refer to the course materials provided by Pau Labarta. Comprehensive guides, tutorials, and additional resources can be found on his website.
