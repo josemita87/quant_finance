@@ -19,18 +19,22 @@ def produce_trades(
     from src.kraken_api import KrakenwebsocketTradeAPI
     kraken_api = KrakenwebsocketTradeAPI(product_id = 'BTC/USD')
 
+    print('Connecting to Kraken API...')
 
     while True:
 
         trades: List[Dict] = kraken_api.get_trades()
+        print('Trades received')
 
         for trade in trades:
-
+            print(f"Trade size: {len(str(trade).encode('utf-8'))} bytes")    
+            import time
+            time.sleep(10)
             with app.get_producer() as producer:
                 
                 message = topic.serialize(key = trade["product_id"], value = trade)
 
-                # Produce a messace into the katka topic.
+                # Produce a messace into the kafka topic.
                 producer.produce(
                     topic=topic.name, 
                     value=message.value, 
@@ -40,9 +44,10 @@ def produce_trades(
             from time import sleep
             print('message sent')
             sleep(1)
+            
 
 if __name__ == '__main__':
     produce_trades(
-        'localhost:19092',
+        'redpanda-0:9092',
         'trade'
     )
