@@ -1,5 +1,5 @@
 from typing import Dict, List
-from src import config
+from src.config import config
 from loguru import logger
 from quixstreams import Application
 
@@ -22,23 +22,27 @@ def produce_trades(kafka_broker: str, kafka_topic_name: str, product_id: str) ->
     logger.info('Connecting to Kraken API...')
 
     while True:
+        logger.info('Waiting for trades ...')
+
         trades: List[Dict] = kraken_api.get_trades()
-        logger.info('Trades received')
 
         for trade in trades:
-            logger.info(f"Trade size: {len(str(trade).encode('utf-8'))} bytes")
 
             with app.get_producer() as producer:
                 message = topic.serialize(key=trade['product_id'], value=trade)
 
                 # Produce a messace into the kafka topic.
                 producer.produce(topic=topic.name, value=message.value, key=message.key)
+                logger.info(message.value)
+
+            from time import sleep
+            sleep(1)
 
 
 if __name__ == '__main__':
 
     produce_trades(
-        config.kafka_broker_adress, 
+        config.kafka_broker_address, 
         config.kafka_topic_name,
         config.product_id
     )
