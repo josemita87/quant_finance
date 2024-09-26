@@ -63,3 +63,6 @@ pytest_cache/
 
 # Ignore dependencies installed in site-packages or similar
 site/
+
+# Kafka volumes
+**/state
