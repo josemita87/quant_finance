@@ -48,10 +48,6 @@ Pipfile.lock
 poetry.lock
 pyproject.toml
 
-# Docker
-docker-compose.yml
-Dockerfile
-
 # Testing and Coverage results
 .tox/
 .coverage
