@@ -4,8 +4,8 @@ __pycache__/
 
 # Virtual environment folders
 venv/
-.env/
-env/
+#.env/
+#env/
 pyvenv.cfg
 pip-log.txt
 

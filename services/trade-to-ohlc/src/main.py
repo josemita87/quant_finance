@@ -63,7 +63,7 @@ def trade_to_ohlc(
     sdf['low'] = sdf['value']['low']
     sdf['close'] = sdf['value']['close']
     sdf['timestamp'] = sdf['end']
-    sdf = sdf[['product_id', 'open', 'high', 'low', 'close']]
+    sdf = sdf[['timestamp', 'product_id', 'open', 'high', 'low', 'close']]
 
     sdf.update(logger.info)
 
