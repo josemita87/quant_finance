@@ -33,6 +33,10 @@ class KrakenwebsocketTradeAPI:
         # Subscribe to trades
         self._subscribe_to_trades()
 
+        #Set finished flag to false (always)
+        self.is_finished = False
+
+        
     def _subscribe_to_trades(self) -> None:
         """
 

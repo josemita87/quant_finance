@@ -16,3 +16,6 @@ lint:
 
 format:
 	ruff format .
+
+dev:
+	poetry run python src/main.py

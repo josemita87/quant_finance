@@ -1,10 +1,16 @@
 from typing import Dict, List
-from src.config import config
+from config import config
 from loguru import logger
 from quixstreams import Application
 
 
-def produce_trades(kafka_broker: str, kafka_topic_name: str, product_id: str) -> None:
+def produce_trades(
+        kafka_broker: str, 
+        kafka_topic_name: str, 
+        product_ids: List[str],
+        live_or_historical,
+        last_n_days:int
+    ) -> None:
     """
     Produce a stream of random trades to a Kafka topic.
 
@@ -14,24 +20,32 @@ def produce_trades(kafka_broker: str, kafka_topic_name: str, product_id: str) ->
 
     app = Application(broker_address=kafka_broker)
     topic = app.topic(name=kafka_topic_name, value_serializer='json')
-
-    from src.kraken_api import KrakenwebsocketTradeAPI
-
-    kraken_api = KrakenwebsocketTradeAPI(product_id=product_id)
-
     logger.info('Connecting to Kraken API...')
 
+    if live_or_historical == 'live':
+        from kraken_api.websocket import KrakenwebsocketTradeAPI
+        kraken_api = KrakenwebsocketTradeAPI(product_id=product_ids[0])
+
+    else:
+        from kraken_api.rest import KrakenRestAPI
+        kraken_api = KrakenRestAPI(product_ids, last_n_days)
+    
     while True:
         logger.info('Waiting for trades ...')
 
+        if kraken_api.is_finished:
+            logger.info('Finished receiving trades.')
+            break
+        
         trades: List[Dict] = kraken_api.get_trades()
+        logger.info(f'Fetched {len(trades)} trades.')
 
         for trade in trades:
 
             with app.get_producer() as producer:
                 message = topic.serialize(key=trade['product_id'], value=trade)
 
-                # Produce a messace into the kafka topic.
+                # Produce a message into the kafka topic.
                 producer.produce(topic=topic.name, value=message.value, key=message.key)
                 logger.info(message.value)
 
@@ -44,5 +58,7 @@ if __name__ == '__main__':
     produce_trades(
         config.kafka_broker_address, 
         config.kafka_topic_name,
-        config.product_id
+        config.product_ids,
+        config.live_or_historical,
+        config.last_n_days
     )
