@@ -26,10 +26,10 @@ def kafka_to_feature_store(
 
     app = Application(
         broker_address=kafka_broker, 
-        consumer_group='kafka-to-feature-store'
+        consumer_group=config.kafka_consumer_group
     )
-    print(f"Connected to Kafka broker at {kafka_broker}")
-    #input = app.topic(name=kafka_topic, value_deserializer='json')
+
+    logger.info(f"Connected to Kafka broker at {kafka_broker}")
     
     with app.get_consumer() as consumer:
 
@@ -58,8 +58,8 @@ def kafka_to_feature_store(
 
 if __name__ == '__main__':  
     kafka_to_feature_store(
-        kafka_topic='ohlc',
+        kafka_topic=config.kafka_topic,
         kafka_broker= config.kafka_broker_address,
-        feature_group_name='ohlc',
-        feature_group_version='1'
+        feature_group_name=config.hopswork_project_name,
+        feature_group_version=config.hopswork_group_version
     )
