@@ -3,11 +3,49 @@ from typing import List, Dict, Tuple
 from datetime import timezone, datetime
 import requests
 
+
+class KrakenRestAPIMultipleProducts:
+
+    def __init__(self, product_ids: List[str], last_n_days: int) -> None:
+        """
+        Initialize the Kraken API REST client.
+        Params:
+            product_ids (List[str]): List of product IDs to fetch data for.
+            last_n_days (int): Number of days in the past to fetch data from.
+        Attributes:
+            to_ms (int): Current date in milliseconds since epoch.
+            from_ms (int): Start date in milliseconds since epoch, calculated based on `last_n_days`.
+            last_trade_ms (int): Timestamp of the last trade in milliseconds since epoch.
+            product_ids (List[str]): List of product IDs to fetch data for.
+            is_finished (bool): Flag indicating whether the data fetching is finished.
+        """
+        # Time related parameters
+        
+        self.kraken_apis = [
+            KrakenRestAPI(product_id, last_n_days) 
+            for product_id in product_ids
+        ]
+
+    def get_trades(self) -> List[Dict]:
+        """
+        Fetch the trades from the Kraken API.
+        Returns:
+            List[Dict]: List of trades.
+        """
+        trades = []
+        for kraken_api in self.kraken_apis:
+            if kraken_api.is_finished:
+                continue
+            trades.extend(kraken_api.get_trades())
+
+        return trades
+        
+
 class KrakenRestAPI:
 
     def __init__(
         self,
-        product_ids: List[str],
+        product_id: str,
         last_n_days: int,
     )-> None:
         """
@@ -32,7 +70,7 @@ class KrakenRestAPI:
         self.from_ms = self.to_ms - last_n_days * 24 * 60 * 60 * 1000
         self.last_trade_ms = self.from_ms
 
-        self.product_ids = product_ids
+        self.product_id = product_id
         self.is_finished = False
         
 
@@ -43,18 +81,18 @@ class KrakenRestAPI:
         headers = {'Accept': 'application/json'}
 
         since_sec = self.last_trade_ms // 1000
-        url = f'https://api.kraken.com/0/public/Trades?pair={self.product_ids[0]}&since={since_sec}'
+        url = f'https://api.kraken.com/0/public/Trades?pair={self.product_id}&since={since_sec}'
 
         data = requests.get(url, params=payload, headers=headers).json()
-    
+        
         trades = [
             {
                 'price': float(trade[0]),
                 'volume': float(trade[1]),
                 'time': int(trade[2]),
-                'product_id': self.product_ids[0]
+                'product_id': self.product_id
             }
-            for trade in data['result'][self.product_ids[0]]
+            for trade in data['result'][self.product_id]
         ]
 
         #Filter out trades that are after the end timestamp

@@ -5,12 +5,12 @@ from quixstreams import Application
 
 
 def produce_trades(
-        kafka_broker: str, 
-        kafka_topic_name: str, 
-        product_ids: List[str],
-        live_or_historical,
-        last_n_days:int
-    ) -> None:
+    kafka_broker: str, 
+    kafka_topic_name: str, 
+    product_ids: List[str],
+    live_or_historical,
+    last_n_days:int
+) -> None:
     """
     Produce a stream of random trades to a Kafka topic.
 
@@ -27,21 +27,16 @@ def produce_trades(
         kraken_api = KrakenwebsocketTradeAPI(product_id=product_ids[0])
 
     else:
-        from kraken_api.rest import KrakenRestAPI
-        kraken_api = KrakenRestAPI(product_ids, last_n_days)
+        from kraken_api.rest import KrakenRestAPIMultipleProducts 
+        kraken_api = KrakenRestAPIMultipleProducts(product_ids, last_n_days)
     
     while True:
         logger.info('Waiting for trades ...')
-
-        if kraken_api.is_finished:
-            logger.info('Finished receiving trades.')
-            break
-        
-        trades: List[Dict] = kraken_api.get_trades()
+        trades: List[List[Dict]] = kraken_api.get_trades()
         logger.info(f'Fetched {len(trades)} trades.')
-
+        
         for trade in trades:
-
+        
             with app.get_producer() as producer:
                 message = topic.serialize(key=trade['product_id'], value=trade)
 
