@@ -11,12 +11,15 @@ class Config(BaseSettings):
     kafka_broker_address: str = os.environ['KAFKA_BROKER_ADDRESS']
     kafka_topic_name: str = 'trade'
     product_ids: List[str] = Field(
-        default=['ETH/EUR', 'BTC/EUR'], 
+        default=[
+            'ETH/EUR', 
+            'BTC/EUR'
+        ], 
         description="List of product IDs in 'X/Y' format"
     )
 
     #Extra parameters needed when running the producer
-    live_or_historical: Literal['live', 'historical'] = 'historical'
+    live_or_historical: Literal['live', 'historical'] = os.environ['LIVE_OR_HISTORICAL']
     last_n_days:int = 7
     
     @validator('product_ids', each_item=True)

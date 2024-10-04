@@ -3,10 +3,13 @@ import hopsworks
 import pandas as pd
 from config import config
 from loguru import logger
+
+
 def push_data_to_feature_store(
     feature_group_name: str,
     feature_group_version: str,
-    data: dict
+    data: dict,
+    online_offline: str
 ) -> None:
     """
     Function to push data to a feature store.
@@ -15,7 +18,7 @@ def push_data_to_feature_store(
         feature_group_name (str): The name of the feature group.
         feature_group_version (str): The version of the feature group.
         data (dict): The data to push to the feature store.
-
+        online_offline(str): save to online of offline feature group.
     Returns:
         None
     """
@@ -40,4 +43,8 @@ def push_data_to_feature_store(
     data = pd.DataFrame([data])
 
     logger.info(data)
-    ohlc_fg.insert(data)
+    ohlc_fg.insert(
+        data, write_options = {
+            'start_offline_maetrialization': True if online_offline == 'offline' else False
+        }
+    )

@@ -7,6 +7,7 @@ networks:
     driver: bridge
 
 services:
+
   trade-producer:
     #container_name: trade-producer
     build:
@@ -16,9 +17,14 @@ services:
       - redpanda_network
     environment:
       KAFKA_BROKER_ADDRESS: redpanda-0:9092
+      LIVE_OR_HISTORICAL: historical
+      LAST_N_DAYS: 7
 
   trade-to-ohlc: 
     #container_name: ohlc
+    depends_on:
+      - trade-producer
+
     build:
       context: ../services/trade-to-ohlc
     networks:
@@ -26,15 +32,21 @@ services:
     environment:
       KAFKA_BROKER_ADDRESS: redpanda-0:9092
       OHLC_WINDOW_SECONDS: 60
+      BUFFER_SIZE: 1000
 
-    
   kafka-to-feature:
+    
     #container_name: kafka-to-store
+    depends_on:
+      - trade-to-ohlc
+    
     build:
       context: ../services/kafka-to-store
     networks:
       - redpanda_network
     environment:
       KAFKA_BROKER_ADDRESS: redpanda-0:9092
+      ONLINE_OFFLINE: offline
+
     env_file:
       - ../services/kafka-to-store/.env

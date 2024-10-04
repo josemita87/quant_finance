@@ -14,5 +14,8 @@ class Config(BaseSettings):
     hopswork_api_key:str = os.environ['HOPSWORK_API_KEY']
     hopswork_project_name:str = os.environ['HOPSWORK_PROJECT_NAME']
     
-
+    online_offline:str = os.environ['ONLINE_OFFLINE']
+    buffer_size:int = os.environ['BUFFER_SIZE']
+    timer:int = os.environ['TIMER']
+    
 config = Config()

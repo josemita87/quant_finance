@@ -1,6 +1,8 @@
 from typing import List, Dict, Tuple
 
 from datetime import timezone, datetime
+from time import sleep
+from loguru import logger
 import requests
 
 
@@ -74,7 +76,7 @@ class KrakenRestAPI:
         self.is_finished = False
         
 
-
+    
     def get_trades(self) -> List[Dict]:
 
         payload = {}
@@ -84,6 +86,10 @@ class KrakenRestAPI:
         url = f'https://api.kraken.com/0/public/Trades?pair={self.product_id}&since={since_sec}'
 
         data = requests.get(url, params=payload, headers=headers).json()
+        
+        if ('error' in data) and \
+        ('EGeneral:Too many requests' == data['error']):
+            logger.info('Too many requests. Waiting for 5 seconds')
         
         trades = [
             {
@@ -105,6 +111,9 @@ class KrakenRestAPI:
         #Update flag attribute
         self.is_finished = self.last_trade_ms >= self.to_ms   
                  
+        #sleep to avoid hitting the rate limit
+        sleep(1)
+
         return trades
     
   

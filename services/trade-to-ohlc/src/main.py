@@ -1,6 +1,7 @@
 from src.config import config
 from loguru import logger
 from datetime import timedelta
+import time
 
 def trade_to_ohlc(
     kafka_input_topic: str,
@@ -70,8 +71,7 @@ def trade_to_ohlc(
     sdf = sdf.to_topic(output_topic)
     app.run(sdf)
 
-    from time import sleep
-    sleep(10)
+    time.sleep(1)
 
  
     
