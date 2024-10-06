@@ -8,7 +8,7 @@ from loguru import logger
 def push_data_to_feature_store(
     feature_group_name: str,
     feature_group_version: str,
-    data: dict,
+    data: list[dict],
     online_offline: str
 ) -> None:
     """
@@ -40,11 +40,10 @@ def push_data_to_feature_store(
         online_enabled=True
     )
 
-    data = pd.DataFrame([data])
-
-    logger.info(data)
+    data = pd.DataFrame(data)
+   
     ohlc_fg.insert(
         data, write_options = {
-            'start_offline_maetrialization': True if online_offline == 'offline' else False
+            'start_offline_materialization': True if online_offline == 'offline' else False
         }
     )

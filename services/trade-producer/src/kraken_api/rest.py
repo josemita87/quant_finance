@@ -36,9 +36,14 @@ class KrakenRestAPIMultipleProducts:
         """
         trades = []
         for kraken_api in self.kraken_apis:
-            if kraken_api.is_finished:
-                continue
-            trades.extend(kraken_api.get_trades())
+            #Since kraken fetches 1000 trades at a time, we need 
+            #to keep fetching until we reach the end timestamp
+            while not kraken_api.is_finished:
+                trades.extend(kraken_api.get_trades())
+            
+            # Go to the next currency pair
+            continue
+            
 
         return trades
         
@@ -53,13 +58,13 @@ class KrakenRestAPI:
         """
         Initialize the Kraken API REST client.
         Params:
-            product_ids (List[str]): List of product IDs to fetch data for.
+            product_id (str): Product ID to fetch data for.
             last_n_days (int): Number of days in the past to fetch data from.
         Attributes:
             to_ms (int): Current date in milliseconds since epoch.
             from_ms (int): Start date in milliseconds since epoch, calculated based on `last_n_days`.
             last_trade_ms (int): Timestamp of the last trade in milliseconds since epoch.
-            product_ids (List[str]): List of product IDs to fetch data for.
+            product_id (str): Product ID to fetch data for.
             is_finished (bool): Flag indicating whether the data fetching is finished.
         """
         
@@ -81,16 +86,15 @@ class KrakenRestAPI:
 
         payload = {}
         headers = {'Accept': 'application/json'}
-
-        since_sec = self.last_trade_ms // 1000
-        url = f'https://api.kraken.com/0/public/Trades?pair={self.product_id}&since={since_sec}'
+        url = f'https://api.kraken.com/0/public/Trades?pair={self.product_id}&since={self.last_trade_ms//1000}'
 
         data = requests.get(url, params=payload, headers=headers).json()
         
         if ('error' in data) and \
         ('EGeneral:Too many requests' == data['error']):
-            logger.info('Too many requests. Waiting for 5 seconds')
-        
+            logger.info('Too many requests. Waiting for 30 seconds')
+            sleep(30)
+
         trades = [
             {
                 'price': float(trade[0]),
@@ -101,6 +105,7 @@ class KrakenRestAPI:
             for trade in data['result'][self.product_id]
         ]
 
+        
         #Filter out trades that are after the end timestamp
         trades = [trade for trade in trades if trade['time'] <= self.to_ms // 1000]
 
@@ -110,7 +115,10 @@ class KrakenRestAPI:
 
         #Update flag attribute
         self.is_finished = self.last_trade_ms >= self.to_ms   
-                 
+      
+
+        logger.debug(f'Fetched 1000 trades of currency {self.product_id} from Kraken API')
+        
         #sleep to avoid hitting the rate limit
         sleep(1)
 

@@ -36,7 +36,7 @@ def kafka_to_feature_store(
         broker_address=kafka_broker, 
         consumer_group=config.kafka_consumer_group
     )
-
+    input_topic = app.topic(name=kafka_topic, value_deserializer='json', key_deserializer='string')
     buffer = []
     # Save the last time the data was saved to the feature store
     last_save_to_fs = get_current_utc_secs()
@@ -45,35 +45,27 @@ def kafka_to_feature_store(
     
     with app.get_consumer() as consumer:
 
-        consumer.subscribe(topics = [kafka_topic])
+        consumer.subscribe(topics = [input_topic.name])
         
         while True:
             msg = consumer.poll(1)
         
-
-
-
-
-
-            #TODO Check why it is pushing empty data to feature store.
             if not msg:
-                # No new messages
-                logger.info("No new messages")
-                import time
-                time.sleep(1)
+                # If no new messages incoming in backfill mode, 
+                # break the loop and push the data to the feature store
                 if (get_current_utc_secs() - last_save_to_fs) > timer:
-                    logger.info("Pushed empty")
-                    import time
-                    time.sleep(1)
-                    hopswork_api.push_data_to_feature_store(
-                        feature_group_name=feature_group_name,
-                        feature_group_version=feature_group_version,
-                        data=buffer,
-                        online_offline=online_offline
-                    )
-                    last_save_to_fs = get_current_utc_secs()
-                    buffer = []
-                
+            
+                    #avoid pushing empty data to feature store
+                    if buffer:
+                        hopswork_api.push_data_to_feature_store(
+                            feature_group_name=feature_group_name,
+                            feature_group_version=feature_group_version,
+                            data=buffer,
+                            online_offline=online_offline
+                        )
+                        last_save_to_fs = get_current_utc_secs()
+                        breakpoint()
+                        break
                 else:
                     continue
 
@@ -82,19 +74,25 @@ def kafka_to_feature_store(
                 continue
 
             else:
+                
                 ohlc = json.loads(msg.value().decode('utf-8'))
+                logger.info(ohlc)
                 buffer.append(ohlc)
-
-                if len(buffer) > config.buffer_size:
-                    
+                
+              
+                if len(buffer) >= config.buffer_size:
                     # Write the data to the feature store
+                    logger.info(f"Writing {len(buffer)} records to the feature store")
                     hopswork_api.push_data_to_feature_store(
                         feature_group_name=feature_group_name,
                         feature_group_version=feature_group_version,
                         data=buffer,
                         online_offline=online_offline
                     )
-                buffer = []
+                    buffer = []
+
+#TODO
+#Ensure the timestamp of the data corresponds to that of when the trade occured, not when the kafka message was produced
 if __name__ == '__main__':  
     kafka_to_feature_store(
         kafka_topic=config.kafka_topic,

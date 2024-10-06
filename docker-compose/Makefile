@@ -9,7 +9,7 @@ build-feature-pipeline:
 	docker compose -f feature-pipeline.yml build
 
 #Feature pipeline with live data
-run-feature-pipeline:
+run-feature-pipeline: build-feature-pipeline	
 	docker compose -f feature-pipeline.yml up 
 
 stop-feature-pipeline:

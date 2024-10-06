@@ -1,8 +1,9 @@
 from typing import Dict, List
+from itertools import islice
 from config import config
 from loguru import logger
 from quixstreams import Application
-
+import json
 
 def produce_trades(
     kafka_broker: str, 
@@ -19,7 +20,7 @@ def produce_trades(
     """
 
     app = Application(broker_address=kafka_broker)
-    topic = app.topic(name=kafka_topic_name, value_serializer='json')
+    output_topic = app.topic(name=kafka_topic_name, value_serializer='json', key_serializer='string')
     logger.info('Connecting to Kraken API...')
 
     if live_or_historical == 'live':
@@ -31,23 +32,32 @@ def produce_trades(
         kraken_api = KrakenRestAPIMultipleProducts(product_ids, last_n_days)
     
     while True:
-        logger.info('Waiting for trades ...')
-        trades: List[List[Dict]] = kraken_api.get_trades()
-        logger.info(f'Fetched {len(trades)} trades.')
+        trades: List[Dict] = kraken_api.get_trades()
         
-        for trade in trades:
-        
+        for trade in islice(trades, 100):
+            
             with app.get_producer() as producer:
-                message = topic.serialize(key=trade['product_id'], value=trade)
+                
+                # We overwrite the timestamp so later we can calculate the OHLC window.
+                message = output_topic.serialize(
+                    key=trade['product_id'],  # Directly encode the product_id
+                    value=trade,   
+                    timestamp_ms = trade['time'] * 1000 # Convert to milliseconds
+                )
 
                 # Produce a message into the kafka topic.
-                producer.produce(topic=topic.name, value=message.value, key=message.key)
+                producer.produce(
+                    topic=output_topic.name, 
+                    value=message.value, 
+                    key=message.key,
+                    timestamp = message.timestamp
+                )
                 logger.info(message.value)
-
-            from time import sleep
-            sleep(1)
-
-
+                
+            #If we are running the backfill pipeline, we only want to fetch the data once
+        if live_or_historical == 'historical':
+            break
+            
 if __name__ == '__main__':
 
     produce_trades(
