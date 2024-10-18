@@ -3,7 +3,7 @@ networks:
   redpanda_network:
     name: redpanda_network
     driver: bridge
-    external: true
+    external: false
 volumes:
   redpanda-0: null
 services:

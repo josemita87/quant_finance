@@ -1,5 +1,5 @@
 from typing import List, Dict, Tuple
-
+from src.kraken_api.trade import Trade
 from datetime import timezone, datetime
 from time import sleep
 from loguru import logger
@@ -82,7 +82,7 @@ class KrakenRestAPI:
         
 
     
-    def get_trades(self) -> List[Dict]:
+    def get_trades(self) -> List[Trade]:
 
         payload = {}
         headers = {'Accept': 'application/json'}
@@ -96,12 +96,12 @@ class KrakenRestAPI:
             sleep(30)
 
         trades = [
-            {
-                'price': float(trade[0]),
-                'volume': float(trade[1]),
-                'time': int(trade[2]),
-                'product_id': self.product_id
-            }
+            Trade(
+                product_id=trade['symbol'],
+                price=trade['price'],
+                volume=trade['qty'],
+                timestamp_ms=trade['timestamp']
+            )
             for trade in data['result'][self.product_id]
         ]
 

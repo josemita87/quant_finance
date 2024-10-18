@@ -1,9 +1,9 @@
 
 start-redpanda:
-	docker-compose -f docker-compose.yml up -d
+	docker-compose -f redpanda.yml up -d
 
 stop-redpanda:
-	docker-compose -f docker-compose.yml down
+	docker-compose -f redpanda.yml down
 
 build-feature-pipeline:
 	docker compose -f feature-pipeline.yml build

@@ -16,7 +16,8 @@ def kafka_to_feature_store(
     feature_group_name: str,
     feature_group_version:str,
     online_offline:str,
-    timer:int
+    timer:int,
+    buffer_size:int
 ) -> None:
     """
     Function to transfer data from Kafka to a feature store.
@@ -26,7 +27,8 @@ def kafka_to_feature_store(
         kafka_broker (str): The Kafka broker address.
         feature_group_name (str): The name of the feature group.
         feature_group_version (str): The version of the feature group.
-        online_offline(str): save to online of offline feature store.
+        online_offline(str): save to online of offline feature store,
+        this is for live, historical respectively.
 
     Returns:
         None
@@ -34,8 +36,10 @@ def kafka_to_feature_store(
 
     app = Application(
         broker_address=kafka_broker, 
-        consumer_group=config.kafka_consumer_group
+        consumer_group=config.kafka_consumer_group,
+        auto_offset_reset='latest'
     )
+
     input_topic = app.topic(name=kafka_topic, value_deserializer='json', key_deserializer='string')
     buffer = []
     # Save the last time the data was saved to the feature store
@@ -52,20 +56,22 @@ def kafka_to_feature_store(
         
             if not msg:
                 # If no new messages incoming in backfill mode, 
-                # break the loop and push the data to the feature store
-                if (get_current_utc_secs() - last_save_to_fs) > timer:
+                # break the loop and push residual data 
+                if online_offline == 'offline':
+                        
+                    if (get_current_utc_secs() - last_save_to_fs) > timer:
+                
+                        #avoid pushing empty data to feature store
+                        if buffer:
+                            hopswork_api.push_data_to_feature_store(
+                                feature_group_name=feature_group_name,
+                                feature_group_version=feature_group_version,
+                                data=buffer,
+                                online_offline=online_offline
+                            )
+                            last_save_to_fs = get_current_utc_secs()
             
-                    #avoid pushing empty data to feature store
-                    if buffer:
-                        hopswork_api.push_data_to_feature_store(
-                            feature_group_name=feature_group_name,
-                            feature_group_version=feature_group_version,
-                            data=buffer,
-                            online_offline=online_offline
-                        )
-                        last_save_to_fs = get_current_utc_secs()
-                        breakpoint()
-                        break
+                            break
                 else:
                     continue
 
@@ -76,11 +82,9 @@ def kafka_to_feature_store(
             else:
                 
                 ohlc = json.loads(msg.value().decode('utf-8'))
-                logger.info(ohlc)
                 buffer.append(ohlc)
                 
-              
-                if len(buffer) >= config.buffer_size:
+                if len(buffer) >= buffer_size:
                     # Write the data to the feature store
                     logger.info(f"Writing {len(buffer)} records to the feature store")
                     hopswork_api.push_data_to_feature_store(
@@ -91,14 +95,15 @@ def kafka_to_feature_store(
                     )
                     buffer = []
 
-#TODO
-#Ensure the timestamp of the data corresponds to that of when the trade occured, not when the kafka message was produced
+
+
 if __name__ == '__main__':  
     kafka_to_feature_store(
-        kafka_topic=config.kafka_topic,
+        kafka_topic=config.kafka_input_topic,
         kafka_broker= config.kafka_broker_address,
-        feature_group_name=config.hopswork_project_name,
+        feature_group_name=config.hopswork_feature_group_name,
         feature_group_version=config.hopswork_group_version,
         online_offline = config.online_offline,
-        timer = config.timer
+        timer = config.timer,
+        buffer_size = config.buffer_size
     )

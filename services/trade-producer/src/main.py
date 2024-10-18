@@ -3,13 +3,14 @@ from itertools import islice
 from config import config
 from loguru import logger
 from quixstreams import Application
+from src.kraken_api.trade import Trade
 import json
 
 def produce_trades(
     kafka_broker: str, 
     kafka_topic_name: str, 
     product_ids: List[str],
-    live_or_historical,
+    live_or_historical:str,
     last_n_days:int
 ) -> None:
     """
@@ -25,14 +26,14 @@ def produce_trades(
 
     if live_or_historical == 'live':
         from kraken_api.websocket import KrakenwebsocketTradeAPI
-        kraken_api = KrakenwebsocketTradeAPI(product_id=product_ids[0])
+        kraken_api = KrakenwebsocketTradeAPI(product_ids=product_ids)
 
     else:
         from kraken_api.rest import KrakenRestAPIMultipleProducts 
         kraken_api = KrakenRestAPIMultipleProducts(product_ids, last_n_days)
     
     while True:
-        trades: List[Dict] = kraken_api.get_trades()
+        trades: List[Trade] = kraken_api.get_trades()
         
         for trade in islice(trades, 100):
             
@@ -40,9 +41,8 @@ def produce_trades(
                 
                 # We overwrite the timestamp so later we can calculate the OHLC window.
                 message = output_topic.serialize(
-                    key=trade['product_id'],  # Directly encode the product_id
-                    value=trade,   
-                    timestamp_ms = trade['time'] * 1000 # Convert to milliseconds
+                    key=trade.product_id,  # Directly encode the product_id
+                    value=dict(trade),   
                 )
 
                 # Produce a message into the kafka topic.
@@ -50,7 +50,6 @@ def produce_trades(
                     topic=output_topic.name, 
                     value=message.value, 
                     key=message.key,
-                    timestamp = message.timestamp
                 )
                 logger.info(message.value)
                 

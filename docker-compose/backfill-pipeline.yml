@@ -30,7 +30,7 @@ services:
     environment:
       KAFKA_BROKER_ADDRESS: redpanda-0:9092
       OHLC_WINDOW_SECONDS: 6
-      BUFFER_SIZE: 1000
+      BUFFER_SIZE: 100
 
   kafka-to-feature:
     

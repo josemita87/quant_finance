@@ -34,14 +34,13 @@ def push_data_to_feature_store(
     ohlc_fg = feature_store.get_or_create_feature_group(
         name=feature_group_name,
         version=feature_group_version,
-        description='OHLC data',
         primary_key=['product_id', 'timestamp'],
         event_time= 'timestamp',
         online_enabled=True
     )
 
     data = pd.DataFrame(data)
-   
+    
     ohlc_fg.insert(
         data, write_options = {
             'start_offline_materialization': True if online_offline == 'offline' else False

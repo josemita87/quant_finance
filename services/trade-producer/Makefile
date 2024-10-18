@@ -3,13 +3,23 @@
 build:
 	docker build  -t trade-producer .
 
-run: build
+run-live: build
 	docker run \
 	-it --network redpanda_network \
 	--env KAFKA_BROKER_ADDRESS=redpanda-0:9092 \
+	--env KAFKA_TOPIC_NAME=trade_live \
+	--env LIVE_OR_HISTORICAL=live \
 	--rm -p 8001:8001 \
-	--name trade-producer trade-producer
+	--name trade-producer-live trade-producer #First term is name of container, second is name of the image which is being pulled
 
+run-backfill: build
+	docker run \
+	-it --network redpanda_network \
+	--env KAFKA_BROKER_ADDRESS=redpanda-0:9092 \
+	--env KAFKA_TOPIC_NAME=trade_backfill \
+	--env LIVE_OR_HISTORICAL=historical \
+	--rm -p 8001:8001 \
+	--name trade-producer-backfill trade-producer
 
 lint:
 	ruff check --fix
