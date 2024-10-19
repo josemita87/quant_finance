@@ -94,24 +94,23 @@ class KrakenRestAPI:
         ('EGeneral:Too many requests' == data['error']):
             logger.info('Too many requests. Waiting for 30 seconds')
             sleep(30)
-
+       
         trades = [
             Trade(
-                product_id=trade['symbol'],
-                price=trade['price'],
-                volume=trade['qty'],
-                timestamp_ms=trade['timestamp']
+                product_id=self.product_id,
+                price=trade[0],
+                volume=trade[1],
+                timestamp_ms=int(trade[2] * 1000) # Convert to milliseconds
             )
             for trade in data['result'][self.product_id]
         ]
 
         
         #Filter out trades that are after the end timestamp
-        trades = [trade for trade in trades if trade['time'] <= self.to_ms // 1000]
+        trades = [trade for trade in trades if trade.timestamp_ms <= self.to_ms]
 
         #Update the last trade timestamp
-        last_tx_in_ns = int(data['result']['last'])
-        self.last_trade_ms = last_tx_in_ns // 1000000
+        self.last_trade_ms = int(data['result']['last']) // 1000000
 
         #Update flag attribute
         self.is_finished = self.last_trade_ms >= self.to_ms   

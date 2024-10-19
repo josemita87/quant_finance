@@ -2,13 +2,27 @@ from src.config import config
 from loguru import logger
 from datetime import timedelta
 import time
+from typing import  Any, Optional, List, Tuple
+
+
+
+
+def custom_ts_extractor(
+        value: Any, 
+        headers: Optional[List[Tuple]],
+        timestamp: float,
+        timestamp_type
+    ):
+        return value['timestamp_ms']
+
 
 def trade_to_ohlc(
     kafka_input_topic: str,
     kafka_output_topic: str,
     kafka_broker: str, 
     ohlc_window_seconds,
-    consumer_group: str
+    consumer_group: str,
+    auto_offset_reset: str 
 ) -> None:
     """
     Consume trades from a Kafka topic, aggregates them using 
@@ -18,6 +32,7 @@ def trade_to_ohlc(
     :param kafka_topic_name: The name of the Kafka topic to read from.
     :param product_id: The product ID to filter trades by.
     :param consumer_group: The Kafka consumer group to use.
+    :param auto_offset_reset: The Kafka offset reset policy.
     :return: None
     """
 
@@ -26,11 +41,23 @@ def trade_to_ohlc(
     app = Application(
         broker_address=kafka_broker, 
         consumer_group=consumer_group,
-        auto_offset_reset='latest'
+        auto_offset_reset=auto_offset_reset
     )
 
-    input_topic = app.topic(name=kafka_input_topic, value_deserializer='json', key_deserializer='string')
-    output_topic = app.topic(name=kafka_output_topic, value_serializer='json', key_serializer='string')
+    
+    
+    input_topic = app.topic(
+        name=kafka_input_topic, 
+        value_deserializer='json', 
+        key_deserializer='string',
+    )
+
+    output_topic = app.topic(
+        name=kafka_output_topic, 
+        value_serializer='json', 
+        key_serializer='string',
+        timestamp_extractor= custom_ts_extractor
+    )
 
     
     # Initialize the OHLC candle
@@ -82,5 +109,6 @@ if __name__ == '__main__':
         kafka_output_topic= config.kafka_output_topic_name,
         kafka_broker= config.kafka_broker_address,
         ohlc_window_seconds= config.ohlc_window_seconds,
-        consumer_group= config.consumer_group
+        consumer_group= config.consumer_group,
+        auto_offset_reset= config.auto_offset_reset
     )

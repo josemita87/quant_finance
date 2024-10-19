@@ -35,7 +35,7 @@ def produce_trades(
     while True:
         trades: List[Trade] = kraken_api.get_trades()
         
-        for trade in islice(trades, 100):
+        for trade in trades:
             
             with app.get_producer() as producer:
                 
@@ -44,14 +44,16 @@ def produce_trades(
                     key=trade.product_id,  # Directly encode the product_id
                     value=dict(trade),   
                 )
-
+                
                 # Produce a message into the kafka topic.
                 producer.produce(
                     topic=output_topic.name, 
                     value=message.value, 
                     key=message.key,
+                    timestamp=trade.timestamp_ms #Trade timestamp, not upload timestamp
                 )
-                logger.info(message.value)
+                if live_or_historical == 'live':
+                    logger.info(f'Produced trade: {trade} to topic: {output_topic.name}')
                 
             #If we are running the backfill pipeline, we only want to fetch the data once
         if live_or_historical == 'historical':
@@ -61,7 +63,7 @@ if __name__ == '__main__':
 
     produce_trades(
         config.kafka_broker_address, 
-        config.kafka_topic_name,
+        config.kafka_output_topic,
         config.product_ids,
         config.live_or_historical,
         config.last_n_days

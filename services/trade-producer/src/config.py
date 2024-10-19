@@ -8,7 +8,7 @@ from typing import List, Literal
 
 class Config(BaseSettings):
     kafka_broker_address: str = Field(..., env='KAFKA_BROKER_ADDRESS') 
-    kafka_topic_name: str = Field(..., env='KAFKA_TOPIC_NAME')
+    kafka_output_topic: str = Field(..., env='KAFKA_OUTPUT_TOPIC')
     
     product_ids: List[str] = Field(..., env='PRODUCT_IDS')  
 
