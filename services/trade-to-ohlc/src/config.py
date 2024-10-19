@@ -1,15 +1,17 @@
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv, find_dotenv
-import os
+from pydantic import Field
 
+# Load environment variables from .env file
 load_dotenv(find_dotenv())
 
 class Config(BaseSettings):
-    kafka_broker_address: str = os.environ['KAFKA_BROKER_ADDRESS']
-    kafka_input_topic_name: str = os.environ['KAFKA_INPUT_TOPIC']
-    kafka_output_topic_name: str = os.environ['KAFKA_OUTPUT_TOPIC']
-    ohlc_window_seconds: int = os.environ['OHLC_WINDOW_SECONDS']
-    consumer_group: str = os.environ['CONSUMER_GROUP']
-    auto_offset_reset: str = os.environ['AUTO_OFFSET_RESET']
+    kafka_broker_address: str = Field(..., env='KAFKA_BROKER_ADDRESS')
+    kafka_input_topic: str = Field(..., env='KAFKA_INPUT_TOPIC')
+    kafka_output_topic: str = Field(..., env='KAFKA_OUTPUT_TOPIC')
+    auto_offset_reset: str = Field(..., env='AUTO_OFFSET_RESET')
+    ohlc_window_seconds: int = Field(..., env='OHLC_WINDOW_SECONDS')
+    consumer_group: str = Field(..., env='CONSUMER_GROUP')
 
+# Initialize config with environment variables
 config = Config()

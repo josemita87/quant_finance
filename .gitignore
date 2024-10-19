@@ -62,3 +62,6 @@ site/
 
 # Kafka volumes
 **/state
+
+# Ignore credentials.env
+**/.credentials.env

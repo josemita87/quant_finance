@@ -105,8 +105,8 @@ def trade_to_ohlc(
 if __name__ == '__main__':
     
     trade_to_ohlc(
-        kafka_input_topic= config.kafka_input_topic_name,
-        kafka_output_topic= config.kafka_output_topic_name,
+        kafka_input_topic= config.kafka_input_topic,
+        kafka_output_topic= config.kafka_output_topic,
         kafka_broker= config.kafka_broker_address,
         ohlc_window_seconds= config.ohlc_window_seconds,
         consumer_group= config.consumer_group,

@@ -9,6 +9,7 @@ run-live: build
 	--env KAFKA_BROKER_ADDRESS=redpanda-0:9092 \
 	--env KAFKA_OUTPUT_TOPIC=trade_live \
 	--env LIVE_OR_HISTORICAL=live \
+	--env PRODUCT_IDS='["BTC/EUR", "ETH/EUR"]' \
 	--rm -p 8001:8001 \
 	--name trade-producer-live trade-producer #First term is name of container, second is name of the image which is being pulled
 
@@ -18,6 +19,8 @@ run-backfill: build
 	--env KAFKA_BROKER_ADDRESS=redpanda-0:9092 \
 	--env KAFKA_OUTPUT_TOPIC=trade_backfill \
 	--env LIVE_OR_HISTORICAL=historical \
+	--env PRODUCT_IDS='["BTC/EUR", "ETH/EUR"]' \
+	--env LAST_N_DAYS=1 \
 	--rm -p 8001:8001 \
 	--name trade-producer-backfill trade-producer
 

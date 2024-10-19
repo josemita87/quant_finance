@@ -15,10 +15,9 @@ services:
       - redpanda_network
     environment:
       KAFKA_BROKER_ADDRESS: redpanda-0:9092
-      KAFKA_OUTPUT_TOPIC: trade_backfill
-      LIVE_OR_HISTORICAL: historical
+      KAFKA_OUTPUT_TOPIC: trade_live
+      LIVE_OR_HISTORICAL: live
       PRODUCT_IDS: '["BTC/EUR", "ETH/EUR"]'
-      LAST_N_DAYS: 1
     ports:
       - "8001:8001"
 
@@ -29,11 +28,11 @@ services:
       - redpanda_network
     environment:
       KAFKA_BROKER_ADDRESS: redpanda-0:9092
-      KAFKA_INPUT_TOPIC: trade_backfill
-      KAFKA_OUTPUT_TOPIC: ohlc_backfill
-      AUTO_OFFSET_RESET: earliest
+      KAFKA_INPUT_TOPIC: trade_live
+      KAFKA_OUTPUT_TOPIC: ohlc_live
+      AUTO_OFFSET_RESET: latest
       OHLC_WINDOW_SECONDS: 10
-      CONSUMER_GROUP: trade-to-ohlc-backfill
+      CONSUMER_GROUP: trade-to-ohlc-live_v1
     ports:
       - "8002:8002"
 
@@ -44,16 +43,14 @@ services:
       - redpanda_network
     environment:
       KAFKA_BROKER_ADDRESS: redpanda-0:9092
-      KAFKA_INPUT_TOPIC: ohlc_backfill
-      KAFKA_CONSUMER_GROUP: kafka-to-store-backfill
-      AUTO_OFFSET_RESET: earliest
+      KAFKA_INPUT_TOPIC: ohlc_live
+      KAFKA_CONSUMER_GROUP: kafka-to-store-live_v1
+      AUTO_OFFSET_RESET: latest
       HOPSWORK_PROJECT_NAME: ml_system_c1
       HOPSWORK_FEATURE_GROUP_NAME: candles_fgap
       HOPSWORK_FEATURE_GROUP_VERSION: 1
-      ONLINE_OFFLINE: offline
-      BUFFER_SIZE: 100
-      TIMER: 10
-      
+      ONLINE_OFFLINE: online
+      BUFFER_SIZE: 1
     env_file:
       - ../services/kafka-to-store/.credentials.env
     ports:
