@@ -15,6 +15,7 @@ class Config(BaseSettings):
 
     # Backfill mode specific
     last_n_days: Optional[int] = Field(None, env='LAST_N_DAYS') 
+    cache_dir_path: Optional[str] = Field(None, env='CACHE_DIR_PATH')
 
     # Validators 
     @field_validator('product_ids', mode='before')

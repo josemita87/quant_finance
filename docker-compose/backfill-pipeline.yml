@@ -19,8 +19,11 @@ services:
       LIVE_OR_HISTORICAL: historical
       PRODUCT_IDS: '["BTC/EUR", "ETH/EUR"]'
       LAST_N_DAYS: 1
+      CACHE_DIR_PATH: /tmp/cached_backfill
     ports:
       - "8001:8001"
+    restart:
+      on-failure
 
   trade-to-ohlc:
     build:
@@ -36,6 +39,8 @@ services:
       CONSUMER_GROUP: trade-to-ohlc-backfill
     ports:
       - "8002:8002"
+    restart:
+      always
 
   kafka-to-feature:
     build:
@@ -53,8 +58,10 @@ services:
       ONLINE_OFFLINE: offline
       BUFFER_SIZE: 100
       TIMER: 10
-      
+
     env_file:
       - ../services/kafka-to-store/.credentials.env
     ports:
       - "8003:8003"
+    restart:
+      always

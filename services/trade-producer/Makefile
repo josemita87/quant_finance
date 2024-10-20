@@ -19,10 +19,14 @@ run-backfill: build
 	--env KAFKA_BROKER_ADDRESS=redpanda-0:9092 \
 	--env KAFKA_OUTPUT_TOPIC=trade_backfill \
 	--env LIVE_OR_HISTORICAL=historical \
-	--env PRODUCT_IDS='["BTC/EUR", "ETH/EUR"]' \
-	--env LAST_N_DAYS=1 \
+	--env PRODUCT_IDS='["DOT/USDT", "PEPE/EUR"]' \
+	--env LAST_N_DAYS=15 \
+	--env CACHE_DIR_PATH=/tmp/cached_backfill \
 	--rm -p 8001:8001 \
+	-v /Users/calcatscubedos.l./Desktop/ml_system_c1/services/trade-producer:/tmp/cached_backfill \
 	--name trade-producer-backfill trade-producer
+
+
 
 lint:
 	ruff check --fix
