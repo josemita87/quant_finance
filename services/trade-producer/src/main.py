@@ -5,9 +5,6 @@ from loguru import logger
 from quixstreams import Application
 from src.kraken_api.trade import Trade
 import json
-import logging
-quix_logger = logging.getLogger('quixstreams')
-quix_logger.setLevel(logging.CRITICAL)  # Set the level to CRITICAL to suppress all messages
 
 
 def produce_trades(

@@ -117,6 +117,10 @@ class KrakenRestAPI:
         #Filter out trades that are after the end timestamp
         trades = [trade for trade in trades if trade.timestamp_ms <= self.to_ms]
 
+        #In here, we were setting self.last_trade_ms to int(data['result']['last']) but it was wrong, 
+        #Notice how in trades, our last trade is the last trade in the list before self.to_ms!!!!
+        #Thus, there could be trades in between the last trade and self.to_ms that we are missing.
+
         
         if int(data['result']['last']) // 1000000 >= self.to_ms:   
             logger.debug(f'Finished processing {self.ids_to_process.pop(0)}')
