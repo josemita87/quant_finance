@@ -141,4 +141,13 @@ The AI uses the following settings that can be configured:
 
 ### Heuristic Evaluation
 
-The AI uses several heurist
+**Random Heuristic**: Selects random moves for the AI.
+- **Center Prioritization**: Favors moves in the center columns.
+- **Board Evaluation Heuristic**: Analyzes the board to check for potential wins or blocks and assigns a score to each configuration.
+
+The AI's strategy becomes increasingly smarter with these heuristics, particularly the board evaluation heuristic that looks for patterns like near-wins and blocking opportunities. This has led to a very strong AI opponent capable of defeating human players, especially if it plays first.
+
+## Performance Considerations
+
+- **Depth Configuration**: The depth parameter controls how many moves ahead the AI simulates. A higher depth improves the AI's intelligence but increases computation time.
+- **Alpha-Beta Pruning**: By pruning branches of the game tree that do not need exploration, Alpha-Beta pruning significantly reduces computation time, making deeper searches more feasible.
