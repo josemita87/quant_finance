@@ -1,0 +1,57 @@
+version: '3.8'
+
+name: feature_pipeline
+
+networks:
+  redpanda_network:
+    name: redpanda_network
+    driver: bridge
+
+services:
+  trade-producer:
+    build:
+      context: ../services/trade-producer
+    networks:
+      - redpanda_network
+    environment:
+      KAFKA_BROKER_ADDRESS: redpanda-0:9092
+      KAFKA_OUTPUT_TOPIC: trade_live
+      LIVE_OR_HISTORICAL: live
+      PRODUCT_IDS: '["BTC/EUR", "ETH/EUR"]'
+    ports:
+      - "8001:8001"
+
+  trade-to-ohlc:
+    build:
+      context: ../services/trade-to-ohlc
+    networks:
+      - redpanda_network
+    environment:
+      KAFKA_BROKER_ADDRESS: redpanda-0:9092
+      KAFKA_INPUT_TOPIC: trade_live
+      KAFKA_OUTPUT_TOPIC: ohlc_live
+      AUTO_OFFSET_RESET: latest
+      OHLC_WINDOW_SECONDS: 10
+      CONSUMER_GROUP: trade-to-ohlc-live_v1
+    ports:
+      - "8002:8002"
+
+  kafka-to-feature:
+    build:
+      context: ../services/kafka-to-store
+    networks:
+      - redpanda_network
+    environment:
+      KAFKA_BROKER_ADDRESS: redpanda-0:9092
+      KAFKA_INPUT_TOPIC: ohlc_live
+      KAFKA_CONSUMER_GROUP: kafka-to-store-live_v1
+      AUTO_OFFSET_RESET: latest
+      HOPSWORK_PROJECT_NAME: ml_system_c1
+      HOPSWORK_FEATURE_GROUP_NAME: candles_fgap
+      HOPSWORK_FEATURE_GROUP_VERSION: 1
+      ONLINE_OFFLINE: online
+      BUFFER_SIZE: 1
+    env_file:
+      - ../services/kafka-to-store/.credentials.env
+    ports:
+      - "8003:8003"
