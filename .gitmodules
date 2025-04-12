@@ -1,3 +1,6 @@
 [submodule "DataEngineering/insideout"]
 	path = DataEngineering/insideout
 	url = https://github.com/josemita87/insideout
+[submodule "DataEngineering/MLStockMarket"]
+	path = DataEngineering/MLStockMarket
+	url = https://github.com/josemita87/ML-system
