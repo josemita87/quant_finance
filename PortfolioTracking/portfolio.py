@@ -1,288 +1,293 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
-import seaborn as sns
-from typing import Tuple, Dict
-import numpy as np
+import matplotlib.dates as mdates
 import argparse
+import os
 
-class PortfolioAnalyzer:
-    def __init__(self, transactions_file: str, current_price: float = None):
-        """Initialize the portfolio analyzer with a transactions file and optional current price."""
-        self.df = pd.read_csv(transactions_file)
-        # Clean column names by stripping whitespace
-        self.df.columns = self.df.columns.str.strip()
-        self.df['Date'] = pd.to_datetime(self.df['Date'], format='%m/%d/%Y')
-        self.df = self.df.sort_values('Date')
-        
-        # Calculate price per share for each transaction
-        self.df['Price_Per_Share'] = abs(self.df['Amount'] / self.df['Shares'])
-        self.current_price = current_price
-        
-    def calculate_basic_metrics(self) -> Dict:
-        """Calculate basic portfolio metrics."""
-        total_investment = abs(self.df[self.df['Transaction Type'] == 'Limit Buy']['Amount'].sum())
-        total_sales = self.df[self.df['Transaction Type'] == 'Limit Sell']['Amount'].sum()
-        total_fees = self.df['Fee'].sum()
-        current_shares = self.df['Shares'].sum()
-        
-        return {
-            'total_investment': total_investment,
-            'total_sales': total_sales,
-            'total_fees': total_fees,
-            'current_shares': current_shares,
-            'realized_pl': total_sales - total_fees
-        }
+def ensure_images_dir():
+    """Create images directory if it doesn't exist."""
+    images_dir = 'images'
+    if not os.path.exists(images_dir):
+        os.makedirs(images_dir)
+    return images_dir
+
+def load_transactions(file_path):
+    """Load transactions from CSV file."""
+    df = pd.read_csv(file_path)
+    # Convert date string to datetime
+    df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
+    # Sort by date
+    df = df.sort_values('Date')
+    # Calculate price per share for each transaction
+    df['Price'] = df['Amount'] / df['Shares']
+    return df
+
+def calculate_portfolio_stats(transactions, current_price=None):
+    """Calculate portfolio statistics over time with simplified approach."""
+    results = []
     
-    def calculate_portfolio_returns(self) -> Dict:
-        """Calculate detailed portfolio returns and percentage changes."""
-        # Initialize running calculations
-        running_shares = 0
-        running_cost_basis = 0
-        total_realized_return = 0
-        returns_data = []
+    # Initialize tracking variables
+    shares_owned = 0
+    total_cost = 0
+    realized_pl = 0
+    total_invested = 0
+    total_shares_bought = 0
+    
+    # Detailed transaction summary
+    print("=== Detailed Transaction Log ===")
+    print(f"{'Date':12} {'Type':10} {'Shares':8} {'Amount':10} {'Price/Share':12}")
+    print(f"{'-'*50}")
+    
+    for idx, row in transactions.iterrows():
+        date = row['Date']
+        transaction_type = row['Type']
+        shares = row['Shares']
+        amount = row['Amount']
+        fee = row['Fee']
+        price = row['Price']
         
-        for _, row in self.df.iterrows():
-            transaction_amount = abs(row['Amount'])
-            shares = abs(row['Shares'])
-            price = row['Price_Per_Share']
-            
-            if row['Transaction Type'] == 'Limit Buy':
-                # Update cost basis and shares for buys
-                running_cost_basis += transaction_amount
-                running_shares += shares
-                avg_cost = running_cost_basis / running_shares if running_shares > 0 else 0
+        # For the last entry, use provided current price if available
+        is_last_entry = idx == len(transactions) - 1
+        if is_last_entry and current_price is not None:
+            current_price_to_use = current_price
+        else:
+            current_price_to_use = price
+        
+        # Print transaction details
+        print(f"{date.strftime('%Y-%m-%d'):12} {transaction_type:10} {shares:8.0f} ${amount:8.2f} ${price:10.2f}")
+        
+        # Update portfolio based on transaction type
+        if transaction_type == 'Limit Buy':
+            # Buy shares
+            total_cost += amount + fee
+            shares_owned += shares
+            total_invested += amount + fee
+            total_shares_bought += shares
+        elif transaction_type == 'Limit Sell':
+            # Sell shares - calculate realized P/L based on average cost
+            if shares_owned > 0:
+                # Calculate average cost before sell
+                avg_cost = total_cost / shares_owned
+                # Calculate realized P/L for this transaction
+                sale_proceeds = amount - fee
+                cost_of_shares_sold = shares * avg_cost
+                transaction_pl = sale_proceeds - cost_of_shares_sold
+                realized_pl += transaction_pl
                 
-                returns_data.append({
-                    'date': row['Date'],
-                    'action': 'Buy',
-                    'shares': running_shares,
-                    'price': price,
-                    'avg_cost': avg_cost,
-                    'unrealized_return_pct': ((price / avg_cost) - 1) * 100 if avg_cost > 0 else 0
-                })
-            else:
-                # Calculate realized returns for sells
-                if running_shares > 0:
-                    avg_cost = running_cost_basis / running_shares
-                    realized_return_pct = ((price / avg_cost) - 1) * 100
-                    realized_return = (price - avg_cost) * shares
-                    total_realized_return += realized_return
-                    
-                    # Adjust cost basis and shares
-                    cost_basis_per_share = running_cost_basis / running_shares
-                    running_cost_basis -= (shares * cost_basis_per_share)
-                    running_shares -= shares
-                    
-                    returns_data.append({
-                        'date': row['Date'],
-                        'action': 'Sell',
-                        'shares': running_shares,
-                        'price': price,
-                        'avg_cost': avg_cost,
-                        'realized_return_pct': realized_return_pct,
-                        'realized_return': realized_return
-                    })
+                # Update shares and adjust total cost proportionally
+                proportion_sold = shares / shares_owned
+                total_cost = total_cost * (1 - proportion_sold)
+                shares_owned -= shares
         
-        # Calculate final position metrics using current price if available
-        final_price = self.current_price if self.current_price is not None else self.df.iloc[-1]['Price_Per_Share']
-        final_avg_cost = running_cost_basis / running_shares if running_shares > 0 else 0
-        final_unrealized_return_pct = ((final_price / final_avg_cost) - 1) * 100 if final_avg_cost > 0 else 0
-        unrealized_pl = (final_price - final_avg_cost) * running_shares if running_shares > 0 else 0
+        # Calculate current values (using the current price)
+        current_value = shares_owned * current_price_to_use
         
-        # Calculate combined return metric
-        total_investment = abs(self.df[self.df['Transaction Type'] == 'Limit Buy']['Amount'].sum())
-        combined_return = (total_realized_return + unrealized_pl) / total_investment * 100 if total_investment > 0 else 0
+        # Calculate average cost basis
+        avg_cost_basis = total_cost / shares_owned if shares_owned > 0 else 0
         
-        return {
-            'returns_data': returns_data,
-            'final_metrics': {
-                'current_shares': running_shares,
-                'avg_cost_basis': final_avg_cost,
-                'last_price': final_price,
-                'unrealized_return_pct': final_unrealized_return_pct,
-                'unrealized_pl': unrealized_pl,
-                'total_realized_return': total_realized_return,
-                'combined_return_pct': combined_return
-            }
-        }
+        # Calculate unrealized P/L
+        unrealized_pl = current_value - total_cost
+        unrealized_pl_pct = (unrealized_pl / total_cost * 100) if total_cost > 0 else 0
+        
+        # Total P/L (unrealized + realized)
+        total_pl = unrealized_pl + realized_pl
+        
+        # Calculate effective cost basis (accounting for realized P/L)
+        # This shows what your real cost basis would be if you factored in realized gains/losses
+        if shares_owned > 0:
+            effective_cost = total_cost - realized_pl
+            effective_cost_basis = effective_cost / shares_owned if effective_cost > 0 else 0
+        else:
+            effective_cost = 0
+            effective_cost_basis = 0
+            
+        # Calculate lifetime average cost (total invested / total shares bought)
+        lifetime_avg_cost = total_invested / total_shares_bought if total_shares_bought > 0 else 0
+        
+        results.append({
+            'Date': date,
+            'Shares': shares_owned,
+            'Total Cost': total_cost,
+            'Avg Cost Basis': avg_cost_basis,
+            'Effective Cost Basis': effective_cost_basis,
+            'Lifetime Avg Cost': lifetime_avg_cost,
+            'Current Price': current_price_to_use,
+            'Current Value': current_value,
+            'Unrealized P/L': unrealized_pl,
+            'Unrealized P/L %': unrealized_pl_pct,
+            'Realized P/L': realized_pl,
+            'Total P/L': total_pl
+        })
     
-    def plot_portfolio_analysis(self):
-        """Plot all portfolio analysis charts in a single figure."""
-        plt.style.use('seaborn')
-        fig = plt.figure(figsize=(20, 12))
-        
-        # 1. Portfolio Returns (top left)
-        ax1 = plt.subplot2grid((2, 2), (0, 0))
-        returns_analysis = self.calculate_portfolio_returns()
-        returns_data = returns_analysis['returns_data']
-        df_plot = pd.DataFrame(returns_data)
-        
-        # Plot price vs average cost
-        ax1.plot(df_plot['date'], df_plot['price'], label='Transaction Price', marker='o')
-        ax1.plot(df_plot['date'], df_plot['avg_cost'], label='Average Cost Basis', linestyle='--')
-        
-        if self.current_price is not None:
-            ax1.axhline(y=self.current_price, color='r', linestyle=':', 
-                       label=f'Current Price (${self.current_price:.2f})')
-        
-        ax1.set_title('Portfolio Returns Analysis')
-        ax1.set_xlabel('Date')
-        ax1.set_ylabel('Price ($)')
-        ax1.legend()
-        ax1.grid(True)
-        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45)
-        
-        # 2. Returns Percentage (top right)
-        ax2 = plt.subplot2grid((2, 2), (0, 1))
-        realized_returns = [r.get('realized_return_pct', None) for r in returns_data]
-        unrealized_returns = [r.get('unrealized_return_pct', None) for r in returns_data]
-        
-        ax2.plot(df_plot['date'], unrealized_returns, label='Unrealized Returns %', marker='o')
-        realized_points = [(date, ret) for date, ret in zip(df_plot['date'], realized_returns) if ret is not None]
-        if realized_points:
-            dates, returns = zip(*realized_points)
-            ax2.scatter(dates, returns, label='Realized Returns %', marker='^', color='red', s=100)
-        
-        if self.current_price is not None:
-            final_metrics = returns_analysis['final_metrics']
-            ax2.axhline(y=final_metrics['unrealized_return_pct'], color='r', linestyle=':', 
-                       label=f'Current Return ({final_metrics["unrealized_return_pct"]:.2f}%)')
-            # Add combined return indicator
-            ax2.axhline(y=final_metrics['combined_return_pct'], color='g', linestyle='--',
-                       label=f'Combined Return ({final_metrics["combined_return_pct"]:.2f}%)')
-        
-        ax2.set_title('Returns Percentage Over Time')
-        ax2.set_xlabel('Date')
-        ax2.set_ylabel('Return (%)')
-        ax2.legend()
-        ax2.grid(True)
-        plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45)
-        
-        # 3. Portfolio Evolution (bottom left)
-        ax3 = plt.subplot2grid((2, 2), (1, 0))
-        self.df['Cumulative Shares'] = self.df['Shares'].cumsum()
-        ax3.plot(self.df['Date'], self.df['Cumulative Shares'], marker='o')
-        ax3.set_title('Portfolio Size Evolution')
-        ax3.set_xlabel('Date')
-        ax3.set_ylabel('Number of Shares')
-        ax3.grid(True)
-        plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45)
-        
-        # 4. Transaction Distribution (bottom right)
-        ax4 = plt.subplot2grid((2, 2), (1, 1))
-        buys = self.df[self.df['Transaction Type'] == 'Limit Buy']['Amount'].abs()
-        sells = self.df[self.df['Transaction Type'] == 'Limit Sell']['Amount']
-        ax4.hist([buys, sells], label=['Buys', 'Sells'], bins=10)
-        ax4.set_title('Distribution of Transaction Amounts')
-        ax4.set_xlabel('Amount ($)')
-        ax4.set_ylabel('Frequency')
-        ax4.legend()
-        
-        plt.tight_layout()
-        plt.savefig('portfolio_analysis.png', dpi=300, bbox_inches='tight')
-        plt.close()
+    # Print final position
+    print(f"\nFinal position: {shares_owned} shares with total cost ${total_cost:.2f}")
+    print(f"Total realized P/L: ${realized_pl:.2f}")
+    if current_price is not None:
+        print(f"Using current price: ${current_price:.2f} per share (user provided)")
+    
+    return pd.DataFrame(results)
 
-    def analyze_trading_patterns(self) -> Dict:
-        """Analyze trading patterns and frequencies."""
-        buys = self.df[self.df['Transaction Type'] == 'Limit Buy']
-        sells = self.df[self.df['Transaction Type'] == 'Limit Sell']
-        
-        avg_buy_size = abs(buys['Amount'].mean())
-        avg_sell_size = sells['Amount'].mean() if not sells.empty else 0
-        
-        monthly_trades = self.df.groupby(self.df['Date'].dt.to_period('M')).size()
-        
-        return {
-            'total_trades': len(self.df),
-            'buy_trades': len(buys),
-            'sell_trades': len(sells),
-            'avg_buy_size': avg_buy_size,
-            'avg_sell_size': avg_sell_size,
-            'most_active_month': monthly_trades.idxmax(),
-            'trades_in_most_active_month': monthly_trades.max()
-        }
+def plot_portfolio_charts(stats):
+    """Create portfolio performance charts."""
+    # Ensure images directory exists
+    images_dir = ensure_images_dir()
     
-    def plot_portfolio_evolution(self):
-        """Plot the evolution of the portfolio over time."""
-        plt.figure(figsize=(12, 6))
-        
-        # Calculate cumulative shares
-        self.df['Cumulative Shares'] = self.df['Shares'].cumsum()
-        
-        # Plot cumulative shares
-        plt.plot(self.df['Date'], self.df['Cumulative Shares'], marker='o')
-        plt.title('Portfolio Size Evolution Over Time')
-        plt.xlabel('Date')
-        plt.ylabel('Number of Shares')
-        plt.grid(True)
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig('portfolio_evolution.png')
-        plt.close()
+    # Chart 1: Portfolio Value & Cost
+    plt.figure(figsize=(12, 7))
+    plt.plot(stats['Date'], stats['Current Value'], marker='o', linestyle='-', linewidth=2, color='#4CAF50', label='Current Value')
+    plt.plot(stats['Date'], stats['Total Cost'], marker='x', linestyle='--', linewidth=1.5, color='#F44336', label='Total Cost')
     
-    def plot_transaction_distribution(self):
-        """Plot the distribution of transaction amounts."""
-        plt.figure(figsize=(10, 6))
-        
-        # Create separate plots for buys and sells
-        buys = self.df[self.df['Transaction Type'] == 'Limit Buy']['Amount'].abs()
-        sells = self.df[self.df['Transaction Type'] == 'Limit Sell']['Amount']
-        
-        plt.hist([buys, sells], label=['Buys', 'Sells'], bins=10)
-        plt.title('Distribution of Transaction Amounts')
-        plt.xlabel('Amount ($)')
-        plt.ylabel('Frequency')
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig('transaction_distribution.png')
-        plt.close()
+    # Format x-axis date labels
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    
+    plt.title('Portfolio Value vs Cost', fontsize=14)
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Amount ($)', fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.xticks(rotation=45)
+    plt.legend(fontsize=10)
+    plt.tight_layout()
+    plt.savefig(os.path.join(images_dir, 'portfolio_value.png'), dpi=100)
+    plt.close()
+    
+    # Chart 2: Profit/Loss (Unrealized, Realized, and Total)
+    plt.figure(figsize=(12, 7))
+    plt.plot(stats['Date'], stats['Unrealized P/L'], marker='o', linestyle='-', linewidth=2, color='#2196F3', label='Unrealized P/L')
+    plt.plot(stats['Date'], stats['Realized P/L'], marker='s', linestyle='-', linewidth=2, color='#FF9800', label='Realized P/L')
+    plt.plot(stats['Date'], stats['Total P/L'], marker='x', linestyle='--', linewidth=2.5, color='#4CAF50', label='Total P/L')
+    
+    # Add zero line
+    plt.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    
+    # Format x-axis date labels
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    
+    plt.title('Portfolio Profit/Loss Over Time', fontsize=14)
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Profit/Loss ($)', fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.xticks(rotation=45)
+    plt.legend(fontsize=10)
+    plt.tight_layout()
+    plt.savefig(os.path.join(images_dir, 'profit_loss.png'), dpi=100)
+    plt.close()
+    
+    # Chart 3: Share Count Evolution
+    plt.figure(figsize=(12, 7))
+    plt.plot(stats['Date'], stats['Shares'], marker='o', linestyle='-', linewidth=2, color='#673AB7')
+    plt.fill_between(stats['Date'], stats['Shares'], color='#673AB7', alpha=0.2)
+    
+    # Format x-axis date labels
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    
+    plt.title('Total Shares Over Time', fontsize=14)
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Number of Shares', fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig(os.path.join(images_dir, 'shares_count.png'), dpi=100)
+    plt.close()
+    
+    # Chart 4: Cost Basis Evolution (accounting for both realized and unrealized P/L)
+    plt.figure(figsize=(12, 7))
+    plt.plot(stats['Date'], stats['Avg Cost Basis'], marker='o', linestyle='-', linewidth=2, color='#9C27B0', label='Standard Cost Basis')
+    plt.plot(stats['Date'], stats['Effective Cost Basis'], marker='s', linestyle='--', linewidth=2, color='#E91E63', label='Effective Cost Basis (incl. Realized P/L)')
+    plt.plot(stats['Date'], stats['Lifetime Avg Cost'], marker='x', linestyle='-.', linewidth=1.5, color='#795548', label='Lifetime Average Cost')
+    plt.plot(stats['Date'], stats['Current Price'], marker='.', linestyle=':', linewidth=1.5, color='#607D8B', label='Current Price')
+    
+    # Add annotations for significant changes
+    for i, row in stats.iterrows():
+        if i > 0:
+            prev_row = stats.iloc[i-1]
+            # If there's a significant change in cost basis
+            if abs(row['Avg Cost Basis'] - prev_row['Avg Cost Basis']) > 0.05 and row['Shares'] > 0:
+                plt.annotate(f"${row['Avg Cost Basis']:.2f}", 
+                             xy=(row['Date'], row['Avg Cost Basis']),
+                             xytext=(5, 5),
+                             textcoords='offset points',
+                             fontsize=8)
+    
+    # Format x-axis date labels
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    
+    plt.title('Cost Basis Evolution Over Time', fontsize=14)
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Cost per Share ($)', fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.xticks(rotation=45)
+    plt.legend(fontsize=9, loc='best')
+    plt.tight_layout()
+    plt.savefig(os.path.join(images_dir, 'cost_basis_evolution.png'), dpi=100)
+    plt.close()
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Portfolio Tracking Tool')
+    parser.add_argument('-p', '--price', type=float, help='Current price per share (optional)')
+    parser.add_argument('-f', '--file', type=str, default='transactions.csv', help='Transaction CSV file (default: transactions.csv)')
+    
+    return parser.parse_args()
 
 def main():
-    # Set up argument parser
-    parser = argparse.ArgumentParser(description='Analyze portfolio transactions')
-    parser.add_argument('--price', type=float, help='Current market price', default=None)
-    args = parser.parse_args()
+    # Parse command line arguments
+    args = parse_arguments()
     
-    # Initialize analyzer with optional current price
-    analyzer = PortfolioAnalyzer('transactions.csv', args.price)
+    # Get current price from arguments if provided
+    current_price = args.price
+    if current_price is not None:
+        print(f"Using provided current price: ${current_price:.2f} per share\n")
     
-    # Calculate and display basic metrics
-    metrics = analyzer.calculate_basic_metrics()
-    print("\n=== Portfolio Metrics ===")
-    print(f"Total Investment: ${metrics['total_investment']:.2f}")
-    print(f"Total Sales: ${metrics['total_sales']:.2f}")
-    print(f"Total Fees: ${metrics['total_fees']:.2f}")
-    print(f"Current Shares: {metrics['current_shares']}")
-    print(f"Realized P/L: ${metrics['realized_pl']:.2f}")
+    # Load transactions
+    transactions = load_transactions(args.file)
     
-    # Calculate and display returns metrics
-    returns = analyzer.calculate_portfolio_returns()
-    final_metrics = returns['final_metrics']
-    print("\n=== Portfolio Returns Analysis ===")
-    print(f"Current Position: {final_metrics['current_shares']:.0f} shares")
-    print(f"Average Cost Basis: ${final_metrics['avg_cost_basis']:.2f}")
-    print(f"{'Current' if args.price is not None else 'Last Transaction'} Price: ${final_metrics['last_price']:.2f}")
-    print(f"Unrealized Return: {final_metrics['unrealized_return_pct']:.2f}%")
-    print(f"Unrealized P/L: ${final_metrics['unrealized_pl']:.2f}")
-    print(f"Total Realized Return: ${final_metrics['total_realized_return']:.2f}")
-    print(f"Combined Return: {final_metrics['combined_return_pct']:.2f}%")
+    # Print transaction summary for verification
+    print("=== Transaction Summary ===")
+    buy_shares = transactions[transactions['Type'] == 'Limit Buy']['Shares'].sum()
+    sell_shares = transactions[transactions['Type'] == 'Limit Sell']['Shares'].sum()
+    net_shares = buy_shares - sell_shares
     
-    # Analyze trading patterns
-    patterns = analyzer.analyze_trading_patterns()
-    print("\n=== Trading Patterns ===")
-    print(f"Total Trades: {patterns['total_trades']}")
-    print(f"Buy Trades: {patterns['buy_trades']}")
-    print(f"Sell Trades: {patterns['sell_trades']}")
-    print(f"Average Buy Size: ${patterns['avg_buy_size']:.2f}")
-    print(f"Average Sell Size: ${patterns['avg_sell_size']:.2f}")
-    print(f"Most Active Month: {patterns['most_active_month']}")
-    print(f"Trades in Most Active Month: {patterns['trades_in_most_active_month']}")
+    print(f"Total Buy Shares: {buy_shares}")
+    print(f"Total Sell Shares: {sell_shares}")
+    print(f"Expected Net Shares: {net_shares}")
+    print()
     
-    # Generate combined visualization
-    analyzer.plot_portfolio_analysis()
-    print("\n=== Visualization Generated ===")
-    print("- Portfolio analysis saved as 'portfolio_analysis.png'")
+    # Calculate portfolio stats
+    stats = calculate_portfolio_stats(transactions, current_price)
+    
+    # Display stats
+    pd.set_option('display.float_format', '${:.2f}'.format)
+    
+    print("\n=== Portfolio Evolution ===")
+    print(stats[['Date', 'Shares', 'Total Cost', 'Avg Cost Basis', 'Effective Cost Basis', 'Current Value', 'Unrealized P/L', 'Realized P/L', 'Total P/L']])
+    
+    # Summary of current position
+    latest = stats.iloc[-1]
+    
+    print("\n=== Current Position ===")
+    print(f"Shares Owned: {latest['Shares']:.0f}")
+    print(f"Total Cost: ${latest['Total Cost']:.2f}")
+    print(f"Avg Cost Basis: ${latest['Avg Cost Basis']:.2f} per share")
+    print(f"Effective Cost Basis (incl. Realized P/L): ${latest['Effective Cost Basis']:.2f} per share")
+    print(f"Lifetime Average Cost: ${latest['Lifetime Avg Cost']:.2f} per share")
+    print(f"Current Price: ${latest['Current Price']:.2f} per share")
+    print(f"Current Value: ${latest['Current Value']:.2f}")
+    print(f"Unrealized P/L: ${latest['Unrealized P/L']:.2f} ({latest['Unrealized P/L %']:.2f}%)")
+    print(f"Realized P/L: ${latest['Realized P/L']:.2f}")
+    print(f"Total P/L: ${latest['Total P/L']:.2f}")
+    
+    # Plot charts
+    plot_portfolio_charts(stats)
+    print("\nCharts saved in 'images' folder:")
+    print("- 'portfolio_value.png' (Portfolio value vs cost)")
+    print("- 'profit_loss.png' (Profit/loss over time)")
+    print("- 'shares_count.png' (Share count over time)")
+    print("- 'cost_basis_evolution.png' (Cost basis evolution)")
 
 if __name__ == "__main__":
     main()
