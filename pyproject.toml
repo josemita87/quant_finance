@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "patent-mcp-server"
+version = "0.2.1"
+description = "Model Context Protocol server for USPTO patent data"
+readme = "README.md"
+authors = ["USPTO Patent MCP Server <patent-mcp-server@example.com>"]
+packages = [
+    {include = "patent_mcp_server", from = "src"},
+    {include = "patent_mcp_server.uspto", from = "src"},
+    {include = "patent_mcp_server.util", from = "src"}
+]
+
+[tool.poetry.dependencies]
+python = ">=3.13"
+h2 = ">=4.2.0"
+httpx = ">=0.28.1"
+mcp = {extras = ["cli"], version = ">=1.3.0"}
+python-dotenv = ">=1.0.1"
+typing = ">=3.10.0.0"
+
+[tool.poetry.scripts]
+patent-mcp-server = "patent_mcp_server.patents:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+pytest-asyncio = "^0.21.0"
