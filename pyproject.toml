@@ -2,21 +2,20 @@
 name = "patent-mcp-server"
 version = "0.2.1"
 description = "Model Context Protocol server for USPTO patent data"
-readme = "README.md"
 authors = ["USPTO Patent MCP Server <patent-mcp-server@example.com>"]
-packages = [
-    {include = "patent_mcp_server", from = "src"},
-    {include = "patent_mcp_server.uspto", from = "src"},
-    {include = "patent_mcp_server.util", from = "src"}
-]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.13"
+anthropic = ">=0.40.0"
 h2 = ">=4.2.0"
 httpx = ">=0.28.1"
 mcp = {extras = ["cli"], version = ">=1.3.0"}
 python-dotenv = ">=1.0.1"
-typing = ">=3.10.0.0"
+pydantic = ">=2.8.0"
+pydantic-settings = ">=2.0.0"
+pyngrok = ">=7.0.0"
+uvicorn = ">=0.30.0"
 
 [tool.poetry.scripts]
 patent-mcp-server = "patent_mcp_server.patents:main"

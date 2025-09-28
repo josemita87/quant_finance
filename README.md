@@ -1,143 +1,140 @@
-# USPTO Patent MCP Server
+# USPTO Patent MCP Server with Anthropic Integration
 
-A [FastMCP server](https://github.com/modelcontextprotocol/python-sdk/tree/main/src/mcp/server/fastmcp) for accessing United States Patent and Trademark Office (USPTO) patent and patent application data through the [Patent Public Search](https://www.uspto.gov/patents/search/patent-public-search) API and the [Open Data Portal (ODP) API](https://data.uspto.gov/home). Using this server, Claude Desktop can pull data from the USPTO using either the Public Search API (the backend for the Patent Center) or the ODP APIs:
-
-![Screen Capture of Cladue Desktop using Patents MCP Server](screencap.gif)
-
-For an introduction to MCP servers see [Introducing the Model Context Protcol](https://www.anthropic.com/news/model-context-protocol).
-
-Special thanks to [Parker Hancock](https://github.com/parkerhancock), author of the amazing [Patent Client project](https://github.com/parkerhancock/patent_client), for [blazing the trail](https://github.com/parkerhancock/patent_client/issues/63) to understanding of the string of requests and responses needed to pull data through the Public Search API.
+A Model Context Protocol (MCP) server that provides access to USPTO patent data with integrated Anthropic API support for LLM interactions.
 
 ## Features
 
-This server provides tools for:
+- **USPTO Patent Search**: Full-text patent search via ppubs.uspto.gov
+- **Patent Metadata**: Application data, assignments, transactions via api.uspto.gov
+- **PDF Downloads**: Download patent documents as PDFs
+- **Anthropic Integration**: Seamless LLM interactions with Claude
+- **Ngrok Support**: Public tunnel access for remote connections
+- **Secure Credentials**: SecretStr handling for all sensitive data
 
-1. **Patent Search** - Search for patents and patent applications
-2. **Full Text Documents** - Get complete text of patents including claims, description, etc.
-3. **PDF Downloads** - Download patents as PDF files. (But Claude Desktop doesn't support this as a client currently.)
-4. **Metadata** - Access patent bibliographic information, assignments, and litigation data
+## Quick Start
 
-## API Sources
+### 1. Setup Credentials
 
-This server interacts with two USPTO sources:
+Copy the credentials template and fill in your API keys:
 
-- **ppubs.uspto.gov** - For full text document access, PDF downloads, and advanced search
-- **api.uspto.gov** - For metadata, continuity information, transactions, and assignments
+```bash
+cp .credentials.env.example .credentials.env
+```
 
-## Prerequisites
+Edit `.credentials.env` with your actual credentials:
 
-- Claude Desktop (for integration). Other models and MCP clients have not been tested.
-- For Patent Public Search requests, no API Key is required, but [there are rate limits](https://github.com/parkerhancock/patent_client/issues/143#issuecomment-2078051755). This API is not meant for bulk downloads.
-- For ODP API requests, a USPTO ODP API Key (see below).
-- [UV](https://docs.astral.sh/uv/) for python version and dependency management.
+```env
+# Required
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
-If you're a python developer, but still unfamiliar with uv, you're in for a treat. It's faster and easier than having a separate python version manager (like pyenv) and setting up, activating, and maintaining virtual environments with venv and pip.
+# Optional
+USPTO_API_KEY=your_uspto_api_key_here
+NGROK_AUTH_TOKEN=your_ngrok_auth_token_here
 
-If you don't already have uv installed, `curl -LsSf https://astral.sh/uv/install.sh | sh` should do the trick.
+# Configuration
+MCP_USE_NGROK=false
+MCP_HOST=localhost
+MCP_PORT=8000
+ANTHROPIC_VERSION=2023-06-01
+```
 
-## Installation
+### 2. Install Dependencies
 
-1. Clone this repository:
+```bash
+poetry install
+```
 
-   ```bash
-   git clone https://github.com/riemannzeta/patent_mcp_server
-   cd patent_mcp_server
-   ```
+### 3. Run the Server
 
-2. Install dependencies with uv:
+```bash
+poetry run python src/main.py
+```
 
-   ```bash
-   uv sync
-   ```
+## Usage
 
-   If installed correctly, then:
+### Basic Usage
 
-    ```bash
-    uv run patent-mcp-server
-    ```
+The server automatically:
+1. Loads credentials from `.credentials.env`
+2. Initializes the USPTO MCP server
+3. Initializes the Anthropic API adapter
+4. Starts the MCP server
+5. Provides the server URL for client access
 
-   Should write:
+### With Ngrok Tunnel
 
-    ```bash
-    INFO     Starting USPTO Patent MCP server with stdio transport
-    ```
-    
-   to the console. With an API key installed in the environment and Claude Desktop configured, the patents MCP server is ready.
+To expose the server publicly via ngrok:
 
-## API Key Setup
+1. Set `MCP_USE_NGROK=true` in `.credentials.env`
+2. Add your `NGROK_AUTH_TOKEN` for authenticated tunnels
+3. Run the server - it will automatically create a public tunnel
 
-To use the api.uspto.gov tools, you need to obtain an Open Data Portal (ODP) API key:
+### API Integration
 
-1. Visit [USPTO's Getting Started page](https://data.uspto.gov/apis/getting-started) and follow the instructions to request an API key if you don't already have one.
+The server provides 23 MCP tools for patent search and analysis:
 
-2. Create a `.env` file in the patent_mcp_server directory with the following content:
-   ```
-   USPTO_API_KEY=<your_key_here>
-   ```
-You don't need quotes or the < > brackets around your key. The ppubs tools will run without this API key, but the API key is required for the api tools.
+**Patent Search Tools:**
+- `ppubs_search_patents` - Search granted patents
+- `ppubs_search_applications` - Search patent applications
+- `ppubs_get_patent_by_number` - Get patent by number
+- `ppubs_download_patent_pdf` - Download patent PDF
 
-## Claude Desktop Configuration
+**Metadata Tools:**
+- `get_app` - Get application data
+- `search_applications` - Search applications
+- `get_app_metadata` - Get application metadata
+- `get_app_assignment` - Get assignment data
+- And 15+ more metadata tools
 
-To integrate this MCP server with Claude Desktop:
+## Architecture
 
-1. Update your Claude Desktop configuration file (`claude_desktop_config.json`):
-   ```json
-    {
-      "mcpServers": {
-        "patents": {
-          "command": "uv",
-          "args": [
-            "--directory",
-            "/Users/username/patent_mcp_server",
-            "run",
-            "patent-mcp-server"
-          ]
-        }
-      }
-    }
-   ```
-   You can find `claude_desktop_config.json` on a mac by opening the Claude Desktop app, opening Settings (from the Claude menu or by Command + ' on the keyboard), clicking "Developer" in in the sidebar, and "Edit Config."
+```
+src/main.py                 # Main entry point
+├── .credentials.env        # Credentials configuration
+├── server/main.py          # USPTO MCP Server
+├── llm/anthropic/api.py    # Anthropic API integration
+└── server/api/             # USPTO API clients
+    ├── ppub_uspto.py       # ppubs.uspto.gov client
+    └── uspto.py            # api.uspto.gov client
+```
 
-2. Replace `/Users/username/patent_mcp_server` with the actual path to your patent_mcp_server directory if that's not where it was cloned. (If you're on a mac, this may mean simply replacing `username` with your username.)
+## Configuration
 
-When integrated with Claude Desktop, the server will be automatically started when needed and doesn't need to be run separately. The server uses stdio transport for communication with Claude Desktop or other MCP clients running on the same host.
+### Environment Variables
 
-## Available Functions
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | - | Anthropic API key |
+| `USPTO_API_KEY` | No | - | USPTO API key for enhanced rate limits |
+| `NGROK_AUTH_TOKEN` | No | - | Ngrok auth token for authenticated tunnels |
+| `MCP_USE_NGROK` | No | false | Enable ngrok tunnel |
+| `MCP_HOST` | No | localhost | Server host |
+| `MCP_PORT` | No | 8000 | Server port |
+| `ANTHROPIC_VERSION` | No | 2023-06-01 | Anthropic API version |
 
-The server provides the following functions to interact with USPTO data. Note that the Claude Desktop client does not fully support all of these tools. For example, Claude Desktop does not at present allow for download of PDFs.
+### Server Features
 
-### Public Patent Search (ppubs.uspto.gov)
-- `ppubs_search_patents` - Search for granted patents in USPTO Public Search
-- `ppubs_search_applications` - Search for published patent applications in USPTO Public Search
-- `ppubs_get_full_document` - Get full patent document details by GUID from ppubs.uspto.gov 
-- `ppubs_get_patent_by_number` - Get a granted patent's full text by number from ppubs.uspto.gov
-- `ppubs_download_patent_pdf` - Download a granted patent as PDF from ppubs.uspto.gov (not currently supported by Claude Desktop)
+- **Automatic Startup**: MCP server starts automatically when needed
+- **URL Exposure**: Get server URL for client connections
+- **Tunnel Management**: Automatic ngrok tunnel setup and cleanup
+- **Credential Security**: All sensitive data handled with SecretStr
+- **Error Handling**: Comprehensive error handling and logging
 
-### Open Data Portal API (api.uspto.gov)
-- `get_app(app_num)` - Get basic patent application data
-- `search_applications(...)` - Search for patent applications using query parameters
-- `download_applications(...)` - Download patent applications using query parameters
-- `get_app_metadata(app_num)` - Get application metadata
-- `get_app_adjustment(app_num)` - Get patent term adjustment data
-- `get_app_assignment(app_num)` - Get assignment data
-- `get_app_attorney(app_num)` - Get attorney/agent information
-- `get_app_continuity(app_num)` - Get continuity data
-- `get_app_foreign_priority(app_num)` - Get foreign priority claims
-- `get_app_transactions(app_num)` - Get transaction history
-- `get_app_documents(app_num)` - Get document details
-- `get_app_associated_documents(app_num)` - Get associated documents
-- `get_status_codes(...)` - Search for status codes
-- `search_datasets(...)` - Search bulk dataset products
-- `get_dataset_product(...)` - Get a specific product by its identifier
+## Development
 
-Refer to the function docstrings in the code for detailed parameter information.
+### Running Tests
 
-## Testing
+```bash
+poetry run python -m pytest
+```
 
-The `/test/` directory contains a couple of scripts for testing. `test_patents.py` includes a few tests of direct HTTP requests to the ppubs.uspto.gov and api.uspto.gov endpoints. `test_tools.py` includes a complete set of tests for each tool available to the MCP server. Test results in JSON and PDF format are stored in the `/test/test_results` subdirectory.
+### Code Structure
 
-To execute a test, run `uv run test/test_tools.py` from the project root directory.
+- `src/main.py` - Main application entry point
+- `server/main.py` - USPTO MCP Server implementation
+- `llm/anthropic/api.py` - Anthropic API integration
+- `server/api/` - USPTO API client implementations
 
 ## License
 
-MIT
+This project is licensed under the MIT License.

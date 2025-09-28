@@ -1,40 +1,165 @@
-"""
-USPTO Patent Search MCP Server
-
-This file provides a Model Context Protocol (MCP) server that exposes tools for interacting with multiple USPTO APIs:
-
-1. ppubs.uspto.gov - Provides full text patent documents, PDF downloads, and advanced search
-2. api.uspto.gov - Provides metadata, continuity information, transactions, and assignments
-
-The server uses stdio transport for command-line tools, following the MCP standard.
-"""
-import os
-import json
 import logging
 import sys
+import threading
 from typing import Any, Dict, List, Optional, Union
-
+from pydantic import SecretStr
 from mcp.server.fastmcp import FastMCP
+from pyngrok import ngrok
+
+from server.api.ppub_uspto import PpubsClient
+from server.api.uspto import ApiUsptoClient
+
+HOST = "127.0.0.1"
+PORT = 5003
+NAME = "uspto_patent_tools"
+
 
 # Initialize FastMCP server
-mcp = FastMCP("uspto_patent_tools")
+mcp = FastMCP(
+    NAME,
+    host=HOST,
+    port=PORT,
+)
 
-# Set up logging
 logging.basicConfig(
-    level=logging.INFO, # for production
-    #level=logging.DEBUG, # for debugging
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stderr)]
 )
-logger = logging.getLogger('uspto_patent_mcp')
+logger = logging.getLogger(NAME)
 
-# Import USPTO client implementations
-from patent_mcp_server.uspto.ppubs_uspto_gov import PpubsClient
-from patent_mcp_server.uspto.api_uspto_gov import ApiUsptoClient
-
-# Create client instances for each USPTO API
+# Initialize clients
 ppubs_client = PpubsClient()  # ppubs.uspto.gov module
 api_client = ApiUsptoClient() # api.uspto.gov module
+
+
+class USPTOMCPServer:
+    """USPTO MCP Server with ngrok support."""
+
+    def __init__(self, ngrok_auth_token: Optional[SecretStr] = None):
+        """Initialize the USPTO MCP Server.
+
+        Args:
+            ngrok_auth_token: Optional ngrok auth token for authenticated tunnels (must be SecretStr)
+        """
+        self.ngrok_auth_token = ngrok_auth_token
+        self.ngrok_tunnel = None
+        self.mcp_thread = None
+        self._stop_event = threading.Event()
+
+    def _setup_ngrok(self)-> Optional[str]:
+        """Setup ngrok tunnel for the server using pyngrok SDK."""
+        try:
+            if self.ngrok_auth_token:
+                # Set auth token using pyngrok
+                ngrok.set_auth_token(self.ngrok_auth_token.get_secret_value())
+                logger.info("Ngrok auth token set")
+
+            # Create HTTP tunnel using pyngrok
+            self.ngrok_tunnel = ngrok.connect(
+                addr=f'{HOST}:{PORT}',
+                proto='http'
+            )
+            public_url = self.ngrok_tunnel.public_url
+            logger.info(f"Ngrok tunnel created: {public_url}")
+            return public_url
+
+        except Exception as e:
+            logger.warning(f"Failed to create ngrok tunnel: {e}")
+            return None
+
+    @property
+    def name(self) -> str:
+        """Get the name of the MCP server."""
+        return NAME
+
+    @property
+    def public_url(self) -> Optional[str]:
+        """Get the public ngrok URL if tunnel is active."""
+        if self.ngrok_tunnel:
+            return self.ngrok_tunnel.public_url
+        return None
+
+    @property
+    def is_tunnel_active(self) -> bool:
+        """Check if ngrok tunnel is currently active."""
+        return self.ngrok_tunnel is not None
+
+    def cleanup_ngrok(self):
+        """Cleanup ngrok tunnel."""
+        try:
+            if self.ngrok_tunnel:
+                ngrok.disconnect(self.ngrok_tunnel.public_url)
+                logger.info("Ngrok tunnel closed")
+        except Exception as e:
+            logger.error(f"Error closing ngrok tunnel: {e}")
+        finally:
+            self.ngrok_tunnel = None
+
+    def stop(self):
+        """Stop the MCP server and cleanup resources."""
+        logger.info("Stopping MCP server...")
+
+        # Signal the stop event
+        self._stop_event.set()
+
+        # Cleanup ngrok tunnel
+        if self.ngrok_tunnel:
+            self.cleanup_ngrok()
+
+        # Wait for MCP thread to finish (with timeout)
+        if self.mcp_thread and self.mcp_thread.is_alive():
+            logger.info("Waiting for MCP server thread to finish...")
+            self.mcp_thread.join(timeout=5)  # Wait up to 5 seconds
+            if self.mcp_thread.is_alive():
+                logger.warning("MCP server thread did not stop gracefully")
+
+        logger.info("MCP server stopped")
+
+    def is_running(self) -> bool:
+        """Check if the MCP server is currently running."""
+        return self.mcp_thread is not None and self.mcp_thread.is_alive() and not self._stop_event.is_set()
+
+    def _run_mcp_server(self):
+        """Run the MCP server in a separate thread."""
+        try:
+            logger.info("Starting MCP server in thread")
+            mcp.run(transport='streamable-http')
+        except Exception as e:
+            logger.error(f"Error in MCP server thread: {e}")
+
+    def run(self, host: str = HOST, port: int = PORT):
+        """Run the USPTO MCP Server with HTTP transport in a non-blocking manner.
+
+        Args:
+            host: Host for HTTP transport
+            port: Port for HTTP transport
+        """
+        logger.info(f"Starting MCP server on {host}:{port}")
+
+        try:
+            # Start MCP server in a separate thread
+            self.mcp_thread = threading.Thread(target=self._run_mcp_server, daemon=True)
+            self.mcp_thread.start()
+            logger.info("MCP server started in background thread")
+
+            # Setup ngrok tunnel
+            public_url: Optional[str] = self._setup_ngrok()
+            if not public_url:
+                raise RuntimeError("Failed to create ngrok tunnel")
+            else:
+                logger.info(f"Server accessible at: {public_url}")
+
+            # Return immediately - server is now running in background
+            logger.info("MCP server is running in background. Use stop() to shutdown.")
+
+        except Exception as e:
+            logger.error(f"Error starting server: {e}")
+            self.stop()
+            raise
+
+
+
 
 # =====================================================================
 # Tools for ppubs.uspto.gov (full text patents and PDF downloads)
@@ -51,10 +176,10 @@ async def ppubs_search_patents(
     british_equivalents: Optional[bool] = True
 ) -> Dict[str, Any]:
     """Search for granted patents in USPTO Public Search (ppubs.uspto.gov)
-    
+
     This tool searches full text patents and provides results that include the
     complete text and sections of patents.
-    
+
     Args:
         query: The search query string using USPTO search syntax
         start: Starting position for results (default: 0)
@@ -86,10 +211,10 @@ async def ppubs_search_applications(
     british_equivalents: Optional[bool] = True
 ) -> Dict[str, Any]:
     """Search for published patent applications in USPTO Public Search (ppubs.uspto.gov)
-    
+
     This tool searches full text patent applications and provides results that include
     the complete text and sections of applications.
-    
+
     Args:
         query: The search query string using USPTO search syntax
         start: Starting position for results (default: 0)
@@ -113,10 +238,10 @@ async def ppubs_search_applications(
 @mcp.tool()
 async def ppubs_get_full_document(guid: str, source_type: str) -> Dict[str, Any]:
     """Get full patent document details by GUID from ppubs.uspto.gov
-    
+
     This tool retrieves complete document text including claims, description,
     and all document sections.
-    
+
     Args:
         guid: The unique identifier for the document (e.g., "US-9876543-B2")
         source_type: The document type (e.g., "USPAT" or "US-PGPUB")
@@ -126,29 +251,29 @@ async def ppubs_get_full_document(guid: str, source_type: str) -> Dict[str, Any]
 @mcp.tool()
 async def ppubs_get_patent_by_number(patent_number: Union[str, int]) -> Dict[str, Any]:
     """Get a granted patent's full text by number from ppubs.uspto.gov
-    
+
     This tool retrieves the complete patent document including claims, description,
     and all sections of the patent.
-    
+
     Args:
         patent_number: The patent number (e.g., '7123456')
     """
     # Convert to string if integer
     patent_number = str(patent_number)
-    
+
     # First search for the patent using specific field
     query = f'patentNumber:"{patent_number}"'
     logger.info(f"Searching for patent with query: {query}")
-    
+
     result = await ppubs_client.run_query(
         query=query,
         sources=["USPAT"],
         limit=1
     )
-    
+
     if result.get("error", False):
         return result
-    
+
     # Handle different response structures
     if result.get("patents") and len(result["patents"]) > 0:
         patent = result["patents"][0]
@@ -160,22 +285,22 @@ async def ppubs_get_patent_by_number(patent_number: Union[str, int]) -> Dict[str
         # Try alternative query format
         alternative_query = f'"{patent_number}".pn.'
         logger.info(f"No results found, trying alternative query: {alternative_query}")
-        
+
         result = await ppubs_client.run_query(
             query=alternative_query,
             sources=["USPAT"],
             limit=1
         )
-        
+
         if result.get("error", False):
             return result
-            
+
         if not result.get("patents") and not result.get("docs"):
             return {
                 "error": True,
                 "message": f"Patent {patent_number} not found"
             }
-            
+
         if result.get("patents") and len(result["patents"]) > 0:
             patent = result["patents"][0]
         elif result.get("docs") and len(result["docs"]) > 0:
@@ -185,35 +310,35 @@ async def ppubs_get_patent_by_number(patent_number: Union[str, int]) -> Dict[str
                 "error": True,
                 "message": f"Patent {patent_number} not found"
             }
-    
+
     # Now get the full document
     return await ppubs_client.get_document(patent["guid"], patent["type"])
 
 @mcp.tool()
 async def ppubs_download_patent_pdf(patent_number: Union[str, int]) -> Dict[str, Any]:
     """Download a granted patent as PDF from ppubs.uspto.gov
-    
+
     This tool provides access to the complete patent document as a PDF.
-    
+
     Args:
         patent_number: The patent number (e.g., '7123456')
     """
     # Convert to string if integer
     patent_number = str(patent_number)
-    
+
     # First search for the patent using specific field
     query = f'patentNumber:"{patent_number}"'
     logger.info(f"Searching for patent with query: {query}")
-    
+
     result = await ppubs_client.run_query(
         query=query,
         sources=["USPAT"],
         limit=1
     )
-    
+
     if result.get("error", False):
         return result
-    
+
     # Handle different response structures
     if result.get("patents") and len(result["patents"]) > 0:
         patent = result["patents"][0]
@@ -223,22 +348,22 @@ async def ppubs_download_patent_pdf(patent_number: Union[str, int]) -> Dict[str,
         # Try alternative query format
         alternative_query = f'"{patent_number}".pn.'
         logger.info(f"No results found, trying alternative query: {alternative_query}")
-        
+
         result = await ppubs_client.run_query(
             query=alternative_query,
             sources=["USPAT"],
             limit=1
         )
-        
+
         if result.get("error", False):
             return result
-            
+
         if not result.get("patents") and not result.get("docs"):
             return {
                 "error": True,
                 "message": f"Patent {patent_number} not found"
             }
-            
+
         if result.get("patents") and len(result["patents"]) > 0:
             patent = result["patents"][0]
         elif result.get("docs") and len(result["docs"]) > 0:
@@ -248,17 +373,17 @@ async def ppubs_download_patent_pdf(patent_number: Union[str, int]) -> Dict[str,
                 "error": True,
                 "message": f"Patent {patent_number} not found"
             }
-    
+
     # Handle different field naming in the response
     image_location = patent.get("imageLocation", patent.get("document_structure", {}).get("image_location"))
     page_count = patent.get("pageCount", patent.get("document_structure", {}).get("page_count"))
-    
+
     if not image_location or not page_count:
         return {
             "error": True,
             "message": "Missing image location or page count information"
         }
-    
+
     # Download the PDF
     return await ppubs_client.download_image(
         patent["guid"],
@@ -276,7 +401,7 @@ USPTO_API_BASE = "https://api.uspto.gov"
 @mcp.tool()
 async def get_app(app_num: str) -> Dict[str, Any]:
     """Get patent application data
-    
+
     Args:
         app_num: U.S. Patent Application Number, no / and no , (e.g. 14412875)
     """
@@ -284,16 +409,16 @@ async def get_app(app_num: str) -> Dict[str, Any]:
     return await api_client.make_request(url)
 
 @mcp.tool()
-async def search_applications(q: Optional[str] = None, 
-                            sort: Optional[str] = None, 
-                            offset: Optional[int] = 0, 
-                            limit: Optional[int] = 25, 
-                            facets: Optional[str] = None, 
-                            fields: Optional[str] = None, 
-                            filters: Optional[str] = None, 
+async def search_applications(q: Optional[str] = None,
+                            sort: Optional[str] = None,
+                            offset: Optional[int] = 0,
+                            limit: Optional[int] = 25,
+                            facets: Optional[str] = None,
+                            fields: Optional[str] = None,
+                            filters: Optional[str] = None,
                             range_filters: Optional[str] = None) -> Dict[str, Any]:
     """Search patent applications by query parameters
-    
+
     Args:
         q: Search query string (e.g., "applicationNumberText:14412875")
         sort: Field to sort by (e.g., "applicationMetaData.filingDate asc")
@@ -314,25 +439,25 @@ async def search_applications(q: Optional[str] = None,
         "filters": filters,
         "rangeFilters": range_filters
     }
-    
+
     query_string = api_client.build_query_string(params)
     url = f"{USPTO_API_BASE}/api/v1/patent/applications/search"
     if query_string:
         url = f"{url}?{query_string}"
-    
+
     return await api_client.make_request(url)
 
 @mcp.tool()
-async def search_applications_post(q: Optional[str] = None, 
-                                 filters: Optional[List[Dict[str, Any]]] = None, 
-                                 range_filters: Optional[List[Dict[str, Any]]] = None, 
+async def search_applications_post(q: Optional[str] = None,
+                                 filters: Optional[List[Dict[str, Any]]] = None,
+                                 range_filters: Optional[List[Dict[str, Any]]] = None,
                                  sort: Optional[List[Dict[str, Any]]] = None,
-                                 fields: Optional[List[str]] = None, 
-                                 offset: Optional[int] = 0, 
+                                 fields: Optional[List[str]] = None,
+                                 offset: Optional[int] = 0,
                                  limit: Optional[int] = 25,
                                  facets: Optional[List[str]] = None) -> Dict[str, Any]:
     """Search patent applications by supplying JSON payload
-    
+
     Args:
         q: Search query string
         filters: List of filter objects [{"name": "field_name", "value": ["value1", "value2"]}]
@@ -352,24 +477,24 @@ async def search_applications_post(q: Optional[str] = None,
         "pagination": {"offset": offset, "limit": limit},
         "facets": facets
     }
-    
+
     # Remove None values
     data = {k: v for k, v in data.items() if v is not None}
-    
+
     url = f"{USPTO_API_BASE}/api/v1/patent/applications/search"
     return await api_client.make_request(url, method="POST", data=data)
 
 @mcp.tool()
-async def download_applications(q: Optional[str] = None, 
-                              sort: Optional[str] = None, 
-                              offset: Optional[int] = 0, 
-                              limit: Optional[int] = 25, 
-                              fields: Optional[str] = None, 
-                              filters: Optional[str] = None, 
+async def download_applications(q: Optional[str] = None,
+                              sort: Optional[str] = None,
+                              offset: Optional[int] = 0,
+                              limit: Optional[int] = 25,
+                              fields: Optional[str] = None,
+                              filters: Optional[str] = None,
                               range_filters: Optional[str] = None,
                               format: Optional[str] = "json") -> Dict[str, Any]:
     """Download patent applications by query parameters
-    
+
     Args:
         q: Search query string
         sort: Field to sort by
@@ -390,25 +515,25 @@ async def download_applications(q: Optional[str] = None,
         "rangeFilters": range_filters,
         "format": format
     }
-    
+
     query_string = api_client.build_query_string(params)
     url = f"{USPTO_API_BASE}/api/v1/patent/applications/search/download"
     if query_string:
         url = f"{url}?{query_string}"
-    
+
     return await api_client.make_request(url)
 
 @mcp.tool()
-async def download_applications_post(q: Optional[str] = None, 
-                                   filters: Optional[List[Dict[str, Any]]] = None, 
-                                   range_filters: Optional[List[Dict[str, Any]]] = None, 
+async def download_applications_post(q: Optional[str] = None,
+                                   filters: Optional[List[Dict[str, Any]]] = None,
+                                   range_filters: Optional[List[Dict[str, Any]]] = None,
                                    sort: Optional[List[Dict[str, Any]]] = None,
-                                   fields: Optional[List[str]] = None, 
-                                   offset: Optional[int] = 0, 
+                                   fields: Optional[List[str]] = None,
+                                   offset: Optional[int] = 0,
                                    limit: Optional[int] = 25,
                                    format: Optional[str] = "json") -> Dict[str, Any]:
     """Download patent applications by supplying JSON payload
-    
+
     Args:
         q: Search query string
         filters: List of filter objects [{"name": "field_name", "value": ["value1", "value2"]}]
@@ -428,17 +553,17 @@ async def download_applications_post(q: Optional[str] = None,
         "pagination": {"offset": offset, "limit": limit},
         "format": format
     }
-    
+
     # Remove None values
     data = {k: v for k, v in data.items() if v is not None}
-    
+
     url = f"{USPTO_API_BASE}/api/v1/patent/applications/search/download"
     return await api_client.make_request(url, method="POST", data=data)
 
 @mcp.tool()
 async def get_app_metadata(app_num: str) -> Dict[str, Any]:
     """Get patent application metadata
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -448,7 +573,7 @@ async def get_app_metadata(app_num: str) -> Dict[str, Any]:
 @mcp.tool()
 async def get_app_adjustment(app_num: str) -> Dict[str, Any]:
     """Get patent term adjustment data for an application
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -458,7 +583,7 @@ async def get_app_adjustment(app_num: str) -> Dict[str, Any]:
 @mcp.tool()
 async def get_app_assignment(app_num: str) -> Dict[str, Any]:
     """Get patent assignment data for an application
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -468,7 +593,7 @@ async def get_app_assignment(app_num: str) -> Dict[str, Any]:
 @mcp.tool()
 async def get_app_attorney(app_num: str) -> Dict[str, Any]:
     """Get attorney/agent data for an application
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -478,7 +603,7 @@ async def get_app_attorney(app_num: str) -> Dict[str, Any]:
 @mcp.tool()
 async def get_app_continuity(app_num: str) -> Dict[str, Any]:
     """Get continuity data for an application
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -488,7 +613,7 @@ async def get_app_continuity(app_num: str) -> Dict[str, Any]:
 @mcp.tool()
 async def get_app_foreign_priority(app_num: str) -> Dict[str, Any]:
     """Get foreign priority data for an application
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -498,7 +623,7 @@ async def get_app_foreign_priority(app_num: str) -> Dict[str, Any]:
 @mcp.tool()
 async def get_app_transactions(app_num: str) -> Dict[str, Any]:
     """Get transaction data for an application
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -508,7 +633,7 @@ async def get_app_transactions(app_num: str) -> Dict[str, Any]:
 @mcp.tool()
 async def get_app_documents(app_num: str) -> Dict[str, Any]:
     """Get document details for an application
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -518,7 +643,7 @@ async def get_app_documents(app_num: str) -> Dict[str, Any]:
 @mcp.tool()
 async def get_app_associated_documents(app_num: str) -> Dict[str, Any]:
     """Get associated documents metadata for an application
-    
+
     Args:
         app_num: U.S. Patent Application Number (e.g., 14412875)
     """
@@ -528,11 +653,11 @@ async def get_app_associated_documents(app_num: str) -> Dict[str, Any]:
 # Status Code Endpoints
 
 @mcp.tool()
-async def get_status_codes(q: Optional[str] = None, 
-                         offset: Optional[int] = 0, 
+async def get_status_codes(q: Optional[str] = None,
+                         offset: Optional[int] = 0,
                          limit: Optional[int] = 25) -> Dict[str, Any]:
     """Search patent application status codes
-    
+
     Args:
         q: Search query string
         offset: Position to start from (default: 0)
@@ -543,20 +668,20 @@ async def get_status_codes(q: Optional[str] = None,
         "offset": offset,
         "limit": limit,
     }
-    
+
     query_string = api_client.build_query_string(params)
     url = f"{USPTO_API_BASE}/api/v1/patent/status-codes"
     if query_string:
         url = f"{url}?{query_string}"
-    
+
     return await api_client.make_request(url)
 
 @mcp.tool()
-async def get_status_codes_post(q: Optional[str] = None, 
-                              offset: Optional[int] = 0, 
+async def get_status_codes_post(q: Optional[str] = None,
+                              offset: Optional[int] = 0,
                               limit: Optional[int] = 25) -> Dict[str, Any]:
     """Search patent application status codes by supplying JSON payload
-    
+
     Args:
         q: Search query string
         offset: Position to start from (default: 0)
@@ -566,31 +691,31 @@ async def get_status_codes_post(q: Optional[str] = None,
         "q": q,
         "pagination": {"offset": offset, "limit": limit}
     }
-    
+
     # Remove None values
     data = {k: v for k, v in data.items() if v is not None}
-    
+
     url = f"{USPTO_API_BASE}/api/v1/patent/status-codes"
     return await api_client.make_request(url, method="POST", data=data)
 
 # Bulk Dataset Endpoints
 
 @mcp.tool()
-async def search_datasets(q: Optional[str] = None, 
-                        product_title: Optional[str] = None, 
-                        product_description: Optional[str] = None, 
+async def search_datasets(q: Optional[str] = None,
+                        product_title: Optional[str] = None,
+                        product_description: Optional[str] = None,
                         product_short_name: Optional[str] = None,
-                        offset: Optional[int] = 0, 
-                        limit: Optional[int] = 10, 
+                        offset: Optional[int] = 0,
+                        limit: Optional[int] = 10,
                         facets: Optional[str] = None,
-                        include_files: Optional[bool] = True, 
+                        include_files: Optional[bool] = True,
                         latest: Optional[bool] = False,
-                        labels: Optional[str] = None, 
+                        labels: Optional[str] = None,
                         categories: Optional[str] = None,
-                        datasets: Optional[str] = None, 
+                        datasets: Optional[str] = None,
                         file_types: Optional[str] = None) -> Dict[str, Any]:
     """Search bulk datasets products
-    
+
     Args:
         q: Search query for products
         product_title: Specific product title
@@ -621,24 +746,24 @@ async def search_datasets(q: Optional[str] = None,
         "datasets": datasets,
         "fileTypes": file_types
     }
-    
+
     query_string = api_client.build_query_string(params)
     url = f"{USPTO_API_BASE}/api/v1/datasets/products/search"
     if query_string:
         url = f"{url}?{query_string}"
-    
+
     return await api_client.make_request(url)
 
 @mcp.tool()
-async def get_dataset_product(product_id: str, 
+async def get_dataset_product(product_id: str,
                             file_data_from_date: Optional[str] = None,
-                            file_data_to_date: Optional[str] = None, 
+                            file_data_to_date: Optional[str] = None,
                             offset: Optional[int] = None,
-                            limit: Optional[int] = None, 
+                            limit: Optional[int] = None,
                             include_files: Optional[bool] = None,
                             latest: Optional[bool] = None) -> Dict[str, Any]:
     """Get a specific product by its identifier
-    
+
     Args:
         product_id: Product identifier (shortName)
         file_data_from_date: Filter files by from date (YYYY-MM-DD)
@@ -656,18 +781,10 @@ async def get_dataset_product(product_id: str,
         "includeFiles": include_files,
         "latest": latest
     }
-    
+
     query_string = api_client.build_query_string(params)
     url = f"{USPTO_API_BASE}/api/v1/datasets/products/{product_id}"
     if query_string:
         url = f"{url}?{query_string}"
-    
+
     return await api_client.make_request(url)
-
-def main():
-    # Initialize and run the server with stdio transport
-    logger.info("Starting USPTO Patent MCP server with stdio transport")
-    mcp.run(transport='stdio')
-
-if __name__ == "__main__":
-    main()
