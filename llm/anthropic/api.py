@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Tuple, TYPE_CHECKING, Any, Optional
 
-from pydantic import SecretStr, BaseModel
+from pydantic import BaseModel, SecretStr, ValidationError
 import anthropic
 
 from llm.models import TokenUsage
@@ -107,13 +107,15 @@ class AnthropicAPI:
                 extra_headers=r.api_extra_headers,
             )
 
-        try:
-            parsed: BaseModel = r.output_model.model_validate_json(resp.content[-1].text)
-            tokens_usage = self.calculate_tokens(usage=resp.usage, model=r.api_model)
-            return parsed, tokens_usage
+        last_message = resp.content[-1].text if resp.content else ""
 
-        except Exception as e:
-            raise e
+        try:
+            parsed: BaseModel = r.output_model.model_validate_json(last_message)
+        except (ValidationError, ValueError):
+            parsed = r.output_model(response=last_message)
+
+        tokens_usage = self.calculate_tokens(usage=resp.usage, model=r.api_model)
+        return parsed, tokens_usage
 
     @staticmethod
     def calculate_tokens(usage: Any, model: AnthropicModel) -> TokenUsage:

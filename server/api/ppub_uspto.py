@@ -1,258 +1,300 @@
-"""
-USPTO Public Search Module (ppubs.uspto.gov)
+"""USPTO Public Search client (ppubs.uspto.gov)."""
 
-This module provides tools for accessing the USPTO Public Search API at ppubs.uspto.gov,
-which provides full text patent documents, patent PDFs, and advanced search capabilities.
-"""
+from __future__ import annotations
 
-import os
-import json
 import asyncio
-from typing import Any, Optional, Dict, List, Union
-import httpx
+import base64
+import json
 import logging
 from pathlib import Path
-from server.utils.logging import LoggingTransport
+from typing import Any, Dict, Iterable, Optional
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
-)
-logger = logging.getLogger('ppubs_uspto_gov')
+import httpx
 
-# Constants
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-BASE_URL = "https://ppubs.uspto.gov"
+
+logger = logging.getLogger(__name__)
+
 
 class PpubsClient:
-    """Client for the USPTO Public Search API at ppubs.uspto.gov.
+    """Asynchronous client for the USPTO Public Search API."""
 
-    This client provides access to full text patent documents, search capabilities,
-    and PDF downloads from the USPTO Public Search system.
-    """
+    BASE_URL = "https://ppubs.uspto.gov"
+    USER_AGENT = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+    )
+    DEFAULT_LIMIT = 500
 
-    def __init__(self):
-        self.headers = {
+    def __init__(self, search_query_path: Optional[Path] = None) -> None:
+        self._headers = {
             "X-Requested-With": "XMLHttpRequest",
-            "User-Agent": USER_AGENT,
-            "Origin": BASE_URL,
-            "Referer": f"{BASE_URL}/pubwebapp/",
+            "User-Agent": self.USER_AGENT,
+            "Origin": self.BASE_URL,
+            "Referer": f"{self.BASE_URL}/pubwebapp/",
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
             "Priority": "u=1, i",
         }
 
-        # Create a custom transport that logs all requests and responses
-        transport = httpx.AsyncHTTPTransport()
-        logging_transport = LoggingTransport(transport)
-
-        self.client = httpx.AsyncClient(
-            headers=self.headers,
+        self._client = httpx.AsyncClient(
+            base_url=self.BASE_URL,
+            headers=self._headers,
             http2=True,
             follow_redirects=True,
-            transport=logging_transport,
         )
-        self.session = dict()
-        self.case_id = None
-        self.access_token = None
-        self.search_query = None
+        self._session: Dict[str, Any] = {}
+        self._case_id: Optional[str] = None
+        self._access_token: Optional[str] = None
 
-        # Load search query template
         script_dir = Path(__file__).parent.parent
-        search_query_path = script_dir / "json" / "search_query.json"
-        with open(search_query_path, 'r') as f:
-            self.search_query = json.load(f)
+        default_path = script_dir / "json" / "search_query.json"
+        path = search_query_path or default_path
+        with path.open("r", encoding="utf-8") as file:
+            self._search_template = json.load(file)
 
-    async def get_session(self):
-        """Establish a session with USPTO Public Search."""
-        logger.info("Establishing new session with USPTO Public Search")
-        self.client.cookies = httpx.Cookies()
+    # ------------------------------------------------------------------
+    # Session handling
+    # ------------------------------------------------------------------
 
-        # First request to get cookies
-        response = await self.client.get(f"{BASE_URL}/pubwebapp/")
+    async def ensure_session(self) -> Dict[str, Any]:
+        if self._case_id:
+            return self._session
 
-        # Create session
-        url = f"{BASE_URL}/api/users/me/session"
-        response = await self.client.post(
-            url,
+        self._client.cookies = httpx.Cookies()
+        await self._client.get("/pubwebapp/")
+
+        response = await self._client.post(
+            "/api/users/me/session",
             json=-1,
-            headers={
-                "X-Access-Token": "null",
-                "referer": f"{BASE_URL}/pubwebapp/",
+            headers={**self._headers, "X-Access-Token": "null"},
+        )
+
+        if response.status_code != 200:
+            raise ValueError(
+                f"Failed to establish session: {response.status_code} - {response.text}"
+            )
+
+        self._session = response.json()
+        self._case_id = self._session["userCase"]["caseId"]
+        self._access_token = response.headers.get("X-Access-Token")
+        if self._access_token:
+            self._client.headers["X-Access-Token"] = self._access_token
+
+        logger.debug("ppubs session established with case_id=%s", self._case_id)
+        return self._session
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        require_session: bool = True,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        if require_session:
+            await self.ensure_session()
+
+        response = await self._client.request(method, path, **kwargs)
+
+        if response.status_code == 403 and require_session:
+            logger.debug("ppubs session expired, refreshing")
+            await self.ensure_session()
+            response = await self._client.request(method, path, **kwargs)
+
+        if response.status_code == 429:
+            wait_time = int(response.headers.get("x-rate-limit-retry-after-seconds", 5)) + 1
+            logger.warning("ppubs rate limited, backing off for %s seconds", wait_time)
+            await asyncio.sleep(wait_time)
+            response = await self._client.request(method, path, **kwargs)
+
+        return response
+
+    # ------------------------------------------------------------------
+    # Search helpers
+    # ------------------------------------------------------------------
+
+    def _prepare_query_payload(
+        self,
+        *,
+        query: str,
+        start: int,
+        limit: int,
+        sort: str,
+        default_operator: str,
+        sources: Iterable[str],
+        expand_plurals: bool,
+        british_equivalents: bool,
+    ) -> Dict[str, Any]:
+        payload = json.loads(json.dumps(self._search_template))
+        payload["start"] = start
+        payload["pageCount"] = limit
+        payload["sort"] = sort
+        payload["query"].update(
+            {
+                "caseId": self._case_id,
+                "op": default_operator,
+                "q": query,
+                "queryName": query,
+                "userEnteredQuery": query,
+                "databaseFilters": [
+                    {"databaseName": source, "countryCodes": []} for source in sources
+                ],
+                "plurals": expand_plurals,
+                "britishEquivalents": british_equivalents,
+            }
+        )
+        return payload
+
+    @staticmethod
+    def _first_record(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        for key in ("patents", "docs"):
+            records = result.get(key)
+            if records:
+                return records[0]
+        return None
+
+    async def run_query(
+        self,
+        query: str,
+        *,
+        start: int = 0,
+        limit: int = DEFAULT_LIMIT,
+        sort: str = "date_publ desc",
+        default_operator: str = "OR",
+        sources: Optional[Iterable[str]] = None,
+        expand_plurals: bool = True,
+        british_equivalents: bool = True,
+    ) -> Dict[str, Any]:
+        await self.ensure_session()
+
+        payload = self._prepare_query_payload(
+            query=query,
+            start=start,
+            limit=limit,
+            sort=sort,
+            default_operator=default_operator,
+            sources=sources or ("US-PGPUB", "USPAT", "USOCR"),
+            expand_plurals=expand_plurals,
+            british_equivalents=british_equivalents,
+        )
+
+        counts_response = await self._request(
+            "POST",
+            "/api/searches/counts",
+            json=payload["query"],
+        )
+
+        if counts_response.status_code >= 400:
+            raise ValueError(
+                f"Search counts failed: {counts_response.status_code} - {counts_response.text}"
+            )
+
+        search_response = await self._request(
+            "POST",
+            "/api/searches/searchWithBeFamily",
+            json=payload,
+        )
+
+        if search_response.status_code != 200:
+            raise ValueError(
+                f"Search query failed: {search_response.status_code} - {search_response.text}"
+            )
+
+        result = search_response.json()
+        if result.get("error"):
+            error = result["error"]
+            return {
+                "error": True,
+                "errorCode": error.get("errorCode"),
+                "message": error.get("errorMessage"),
+            }
+        return result
+
+    async def get_document(self, guid: str, source_type: str) -> Dict[str, Any]:
+        await self.ensure_session()
+
+        response = await self._request(
+            "GET",
+            f"/api/patents/highlight/{guid}",
+            params={
+                "queryId": 1,
+                "source": source_type,
+                "includeSections": True,
+                "uniqueId": None,
             },
         )
 
         if response.status_code != 200:
-            logger.error(f"Failed to establish session: {response.status_code} - {response.text}")
-            return None
+            raise ValueError(
+                f"Document request failed: {response.status_code} - {response.text}"
+            )
 
-        # Log response body for debugging
-        logger.debug(f"Session response body: {response.text}")
+        return response.json()
 
-        self.session = response.json()
-        self.case_id = self.session["userCase"]["caseId"]
-        self.access_token = response.headers["X-Access-Token"]
-        self.client.headers["X-Access-Token"] = self.access_token
+    async def get_document_by_number(self, patent_number: str) -> Dict[str, Any]:
+        record = await self._find_patent_record(patent_number)
+        if not isinstance(record, dict):
+            return {"error": True, "message": f"Patent {patent_number} not found"}
+        if record.get("error"):
+            return record
+        return await self.get_document(record["guid"], record["type"])
 
-        logger.info(f"Session established with case ID: {self.case_id}")
-        return self.session
+    async def download_patent_pdf(self, patent_number: str) -> Dict[str, Any]:
+        record = await self._find_patent_record(patent_number)
+        if not isinstance(record, dict):
+            return {"error": True, "message": f"Patent {patent_number} not found"}
+        if record.get("error"):
+            return record
 
-    async def make_request(self, method, url, **kwargs):
-        """Make a request with automatic retry for session expiration."""
-        try:
-            response = await self.client.request(method, url, **kwargs)
+        image_location = record.get(
+            "imageLocation",
+            record.get("document_structure", {}).get("image_location"),
+        )
+        page_count = record.get(
+            "pageCount",
+            record.get("document_structure", {}).get("page_count"),
+        )
 
-            # Handle 403 (Session expired)
-            if response.status_code == 403:
-                logger.info("Session expired, refreshing")
-                await self.get_session()
-                response = await self.client.request(method, url, **kwargs)
-
-            # Handle rate limiting
-            if response.status_code == 429:
-                wait_time = int(response.headers.get("x-rate-limit-retry-after-seconds", 5)) + 1
-                logger.info(f"Rate limited, waiting {wait_time} seconds")
-                await asyncio.sleep(wait_time)
-                response = await self.client.request(method, url, **kwargs)
-
-            # Log response body for debugging
-            logger.debug(f"Response body for {method} {url}: {response.text}")
-
-            return response
-
-        except Exception as e:
-            logger.error(f"Request error: {str(e)}")
+        if not image_location or not page_count:
             return {
                 "error": True,
-                "message": f"Error: {str(e)}"
+                "message": "Missing image location or page count information",
             }
 
-    async def run_query(
+        return await self._download_pdf(
+            guid=record["guid"],
+            image_location=image_location,
+            page_count=page_count,
+            document_type=record["type"],
+        )
+
+    async def _find_patent_record(self, patent_number: str) -> Optional[Dict[str, Any]]:
+        queries = [f'patentNumber:"{patent_number}"', f'"{patent_number}".pn.']
+        for query in queries:
+            result = await self.run_query(query=query, limit=1, sources=("USPAT",))
+            if result.get("error"):
+                return result
+            record = self._first_record(result)
+            if record:
+                return record
+        return None
+
+    async def _download_pdf(
         self,
-        query,
-        start=0,
-        limit=500,
-        sort="date_publ desc",
-        default_operator="OR",
-        sources=["US-PGPUB", "USPAT", "USOCR"],
-        expand_plurals=True,
-        british_equivalents=True,
+        *,
+        guid: str,
+        image_location: str,
+        page_count: int,
+        document_type: str,
     ) -> Dict[str, Any]:
-        """Run a search query against USPTO Public Search."""
-        # Ensure we have a session
-        if self.case_id is None:
-            await self.get_session()
+        await self.ensure_session()
 
-        logger.info(f"Running query: {query}")
+        page_keys = [f"{image_location}/{index:0>8}.tif" for index in range(1, page_count + 1)]
 
-        # Prepare query data
-        data = self.search_query.copy()
-        data["start"] = start
-        data["pageCount"] = limit
-        data["sort"] = sort
-        data["query"]["caseId"] = self.case_id
-        data["query"]["op"] = default_operator
-        data["query"]["q"] = query
-        data["query"]["queryName"] = query
-        data["query"]["userEnteredQuery"] = query
-        data["query"]["databaseFilters"] = [
-            {"databaseName": s, "countryCodes": []} for s in sources
-        ]
-        data["query"]["plurals"] = expand_plurals
-        data["query"]["britishEquivalents"] = british_equivalents
-
-        # Get counts first
-        logger.info("Getting search counts")
-        counts_url = f"{BASE_URL}/api/searches/counts"
-        counts_response = await self.make_request("POST", counts_url, json=data["query"])
-
-        if isinstance(counts_response, dict) and counts_response.get("error", False):
-            return counts_response
-
-        # Execute search
-        logger.info("Executing search query")
-        search_url = f"{BASE_URL}/api/searches/searchWithBeFamily"
-        search_response = await self.make_request("POST", search_url, json=data)
-
-        if isinstance(search_response, dict) and search_response.get("error", False):
-            return search_response
-
-        # Process response
-        if search_response.status_code != 200:
-            return {
-                "error": True,
-                "status_code": search_response.status_code,
-                "message": search_response.text
-            }
-
-        result = search_response.json()
-
-        # Check for API errors
-        if result.get("error", None) is not None:
-            return {
-                "error": True,
-                "errorCode": result["error"]["errorCode"],
-                "message": result["error"]["errorMessage"]
-            }
-
-        # Log search results for debugging
-        logger.debug(f"Search results: {json.dumps(result, indent=2, default=str)}")
-
-        return result
-
-    async def get_document(self, guid, source_type) -> Dict[str, Any]:
-        """Get full document details by GUID."""
-        # Ensure we have a session
-        if self.case_id is None:
-            await self.get_session()
-
-        logger.info(f"Getting document: {guid}")
-
-        url = f"{BASE_URL}/api/patents/highlight/{guid}"
-        params = {
-            "queryId": 1,
-            "source": source_type,
-            "includeSections": True,
-            "uniqueId": None,
-        }
-
-        response = await self.make_request("GET", url, params=params)
-
-        if isinstance(response, dict) and response.get("error", False):
-            return response
-
-        if response.status_code != 200:
-            return {
-                "error": True,
-                "status_code": response.status_code,
-                "message": response.text
-            }
-
-        # Log document data for debugging
-        document_data = response.json()
-        logger.debug(f"Document data: {json.dumps(document_data, indent=2, default=str)}")
-
-        return document_data
-
-    async def _request_save(self, guid, image_location, page_count, document_type):
-        """Request generation of a PDF for download."""
-        # Ensure we have a session
-        if self.case_id is None:
-            await self.get_session()
-
-        logger.info(f"Requesting PDF save for: {guid}")
-
-        page_keys = [
-            f"{image_location}/{i:0>8}.tif"
-            for i in range(1, page_count + 1)
-        ]
-
-        response = await self.client.post(
-            f"{BASE_URL}/api/print/imageviewer",
+        response = await self._client.post(
+            "/api/print/imageviewer",
             json={
-                "caseId": self.case_id,
+                "caseId": self._case_id,
                 "pageKeys": page_keys,
                 "patentGuid": guid,
                 "saveOrPrint": "save",
@@ -260,90 +302,50 @@ class PpubsClient:
             },
         )
 
-        if response.status_code == 500:
-            return {
-                "error": True,
-                "status_code": 500,
-                "message": response.text
-            }
-
-        return response.text  # This is the print job ID
-
-    async def download_image(self, guid, image_location, page_count, document_type) -> Dict[str, Any]:
-        """Download a patent document as PDF."""
-        # Ensure we have a session
-        if self.case_id is None:
-            await self.get_session()
-
-        logger.info(f"Downloading document images for: {guid}")
-
-        try:
-            # Request the document save
-            print_job_id = await self._request_save(guid, image_location, page_count, document_type)
-
-            if isinstance(print_job_id, dict) and print_job_id.get("error", False):
-                return print_job_id
-
-            # Poll for completion
-            while True:
-                logger.info(f"Checking print job status: {print_job_id}")
-                response = await self.client.post(
-                    f"{BASE_URL}/api/print/print-process",
-                    json=[print_job_id],
-                )
-
-                if response.status_code != 200:
-                    return {
-                        "error": True,
-                        "status_code": response.status_code,
-                        "message": response.text
-                    }
-
-                print_data = response.json()
-
-                if print_data[0]["printStatus"] == "COMPLETED":
-                    break
-
-                await asyncio.sleep(1)
-
-            # Get the PDF name
-            pdf_name = print_data[0]["pdfName"]
-
-            # Download the PDF
-            logger.info(f"Downloading PDF: {pdf_name}")
-            request = self.client.build_request(
-                "GET",
-                f"{BASE_URL}/api/internal/print/save/{pdf_name}",
+        if response.status_code >= 500:
+            raise ValueError(
+                f"PDF save request failed: {response.status_code} - {response.text}"
             )
 
-            response = await self.client.send(request, stream=True)
+        print_job_id = response.text.strip()
 
-            if response.status_code != 200:
-                return {
-                    "error": True,
-                    "status_code": response.status_code,
-                    "message": "Failed to download PDF"
-                }
+        while True:
+            poll_response = await self._client.post(
+                "/api/print/print-process",
+                json=[print_job_id],
+            )
 
-            # Return the PDF as base64
-            content = await response.aread()
-            import base64
-            b64_content = base64.b64encode(content).decode('utf-8')
+            if poll_response.status_code != 200:
+                raise ValueError(
+                    f"Print job status failed: {poll_response.status_code} - {poll_response.text}"
+                )
 
-            return {
-                "success": True,
-                "filename": f"{guid}.pdf",
-                "content_type": "application/pdf",
-                "content": b64_content
-            }
+            poll_data = poll_response.json()[0]
+            if poll_data.get("printStatus") == "COMPLETED":
+                pdf_name = poll_data.get("pdfName")
+                break
 
-        except Exception as e:
-            logger.error(f"Error downloading document: {str(e)}")
-            return {
-                "error": True,
-                "message": f"Error: {str(e)}"
-            }
+            await asyncio.sleep(1)
 
-    async def close(self):
-        """Close the client connections."""
-        await self.client.aclose()
+        download_request = self._client.build_request(
+            "GET",
+            f"/api/internal/print/save/{pdf_name}",
+        )
+
+        download_response = await self._client.send(download_request, stream=True)
+        if download_response.status_code != 200:
+            raise ValueError(
+                f"PDF download failed: {download_response.status_code} - {download_response.text}"
+            )
+
+        content = await download_response.aread()
+        b64_content = base64.b64encode(content).decode("utf-8")
+        return {
+            "success": True,
+            "filename": f"{guid}.pdf",
+            "content_type": "application/pdf",
+            "content": b64_content,
+        }
+
+    async def close(self) -> None:
+        await self._client.aclose()

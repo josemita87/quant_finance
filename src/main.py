@@ -5,39 +5,33 @@ USPTO Patent MCP Server with Anthropic Integration
 
 import asyncio
 import sys
-import logging
-from pathlib import Path
 from pydantic import BaseModel, Field
-# Add the parent directory to the Python path
-parent_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(parent_dir))
 
 from llm.anthropic.api import AnthropicAPI
 from llm.models import LLMRequest
 from server.main import USPTOMCPServer
 from src.settings import settings
+from domain.lawyer import LawyerAgent
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
-)
-logger = logging.getLogger('uspto_patent_main')
-
-
-class ResponseModel(BaseModel):
-    response: str = Field(default_factory=str, description="The response from the USPTO MCP Server")
 
 
 async def main():
     """Main entry point for the USPTO Patent MCP Server."""
     try:
-        logger.info("Starting USPTO Patent MCP Server")
+
+        # Initialize domain agent boundary
+        agent = LawyerAgent()
 
         # Initialize MCP server & Ngrok tunnel
-        mcp_server = USPTOMCPServer(ngrok_auth_token=settings.ngrok_auth_token)
-        mcp_server.run()  # This now returns immediately
+        mcp_server = USPTOMCPServer(
+            ngrok_auth_token=settings.ngrok_auth_token,
+            uspto_api_key=settings.uspto_api_key
+        )
+
+        # Get the public endpoint
+        endpoint = mcp_server.run()
+        if endpoint:
+            print(f"MCP endpoint available at: {endpoint}")
 
         # Initialize Anthropic API
         anthropic_api = AnthropicAPI(
@@ -55,27 +49,25 @@ async def main():
 
                 request = LLMRequest(
                     messages=conv_history,
-                    instructions="You are a helpful assistant that can answer questions about the USPTO.",
-                    input = user_input,
-                    output_model = ResponseModel
+                    instructions=agent.system_template,
+                    input=user_input.format(user_input=user_input, conversation_history=conv_history),
+                    output_model=agent.LawyerResponse
                 )
 
-                response = await anthropic_api(request=request)
-                print(f"🤖 Claude: {response}")
-
+                parsed_response, usage = await anthropic_api(request=request)
+                print(f"🤖 Claude: {parsed_response.response}")
+                print(f"$ {usage.cost} cost")
                 conv_history.append({'role': 'user', 'content': user_input})
-                conv_history.append({'role': 'assistant', 'content': response[0].content})
+                conv_history.append({'role': 'assistant', 'content': parsed_response.response})
 
         except KeyboardInterrupt:
-            logger.info("Shutting down...")
+            raise KeyboardInterrupt
         finally:
             # Clean shutdown
             mcp_server.stop()
-            logger.info("Server stopped")
 
     except Exception as e:
-        logger.error(f"Failed to start server: {e}")
-        sys.exit(1)
+        raise e
 
 
 if __name__ == "__main__":

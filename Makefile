@@ -11,7 +11,7 @@ help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 run: ## Run the interactive chat server
-	poetry run python src/main.py
+	poetry run python -m src.main
 
 clean: ## Clean up temporary files
 	find . -type f -name "*.pyc" -delete
