@@ -1,3 +1,8 @@
-Date,Transaction Type,Amount,Shares,Fee
-01/01/2024,Limit Buy,-1000,10,1
-01/15/2024,Limit Sell,1200,5,1
+Date,Type,Amount,Shares,Fee
+16/05/2024,Limit Buy,296.75,350,1
+13/06/2024,Limit Buy,257.98,280,1
+02/07/2024,Limit Buy,453.88,600,1
+05/08/2024,Limit Buy,335.10,500,1
+20/08/2024,Limit Sell,343.54,230,1
+28/08/2024,Limit Buy,343.29,285,1
+04/04/2025,Limit Buy,368.50,700,1

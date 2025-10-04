@@ -1,0 +1,13 @@
+Startup Network Analysis
+========================================
+Number of startups: 36
+Number of connections: 30
+Similarity threshold: 0.77
+
+Network Metrics:
+Clustering Coefficient: 0.24
+Average Path Length: 1.63
+Modularity: -0.03
+Network Density: 0.0476
+Network Diameter: N/A - Graph not connected
+Average Degree: 1.67

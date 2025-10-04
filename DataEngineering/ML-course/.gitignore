@@ -1,3 +1,4 @@
+# Byte-compiled files
 __pycache__/
 *.py[cod]
 
@@ -64,4 +65,3 @@ site/
 
 # Ignore credentials.env
 **/.credentials.env
-GITIGNORE
