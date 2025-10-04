@@ -1,0 +1,67 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+
+# Virtual environment folders
+venv/
+#.env/
+#env/
+pyvenv.cfg
+pip-log.txt
+
+# Virtual environment scripts
+bin/activate
+bin/activate.csh
+bin/activate.fish
+bin/activate.ps1
+
+# Virtual environment Python interpreter settings
+*.pyo
+*.pyd
+*.so
+*.dll
+*.a
+*.lib
+*.deactivate
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Logs and database files
+*.log
+*.db
+*.sqlite3
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Python environment management tools
+Pipfile
+Pipfile.lock
+poetry.lock
+pyproject.toml
+
+# Testing and Coverage results
+.tox/
+.coverage
+coverage.xml
+nosetests.xml
+test-reports/
+pytest_cache/
+*.prof
+
+# Ignore dependencies installed in site-packages or similar
+site/
+
+# Kafka volumes
+**/state
+
+# Ignore credentials.env
+**/.credentials.env
