@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "graph-theory-algorithms"
+version = "0.1.0"
+description = "Algorithms and simulations for graph theory coursework"
+authors = ["Josep Cubedo Macian <136491450+josemita87@users.noreply.github.com>"]
+readme = "README.md"
+packages = [{include = "gt_algorithms", from = "src"}]
+include = ["src/gt_algorithms/startup_similarity/data/*.csv"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+colorama = "^0.4"
+matplotlib = "^3.8"
+networkx = "^3.2"
+numpy = "^1.26"
+scipy = "^1.11"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2"
+ruff = "^0.6"
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"

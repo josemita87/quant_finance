@@ -1,0 +1,14 @@
+line-length = 100
+target-version = "py38"
+
+[lint]
+select = ["E", "F", "I", "D", "B", "UP"]
+ignore = []
+
+[lint.pydocstyle]
+convention = "google"
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

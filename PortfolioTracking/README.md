@@ -1,43 +1,50 @@
-# Portfolio Tracking Tool
+# Portfolio Tracking
 
-A simple Python tool to track investment portfolio statistics and visualize unrealized value over time.
+## Overview
+Command-line utilities for auditing transaction histories. The `portfolio_tracking` package converts CSV trades into running snapshots, computes cost basis metrics, and generates Matplotlib charts for value and profit breakdowns.
 
-## Features
-
-- Calculate cumulative shares and average cost basis
-- Track unrealized value over time
-- Generate portfolio performance statistics
-- Visualize portfolio value with a time-series chart
+## Setup
+```bash
+poetry install
+```
 
 ## Usage
+```bash
+poetry run python -q - <<'PY'
+from pathlib import Path
+from portfolio_tracking.portfolio import (
+    compute_snapshots,
+    load_transactions,
+    plot_performance,
+    snapshots_to_frame,
+)
 
-1. Ensure your transaction data is in CSV format with the following columns:
-   - Date (DD/MM/YYYY)
-   - Type (Limit Buy/Limit Sell)
-   - Amount (transaction value)
-   - Shares (number of shares)
-   - Fee (transaction fee)
+transactions = load_transactions(Path("transactions.csv"))
+snapshots = compute_snapshots(transactions, override_price=42.15)
+frame = snapshots_to_frame(snapshots)
+plot_performance(frame)
+print(frame.tail())
+PY
+```
 
-2. Run the script:
-   ```
-   python portfolio.py
-   ```
+## Structure
+```
+PortfolioTracking/
+├── images/
+├── plots/
+├── src/portfolio_tracking/
+│   ├── __init__.py
+│   └── portfolio.py
+├── transactions.csv
+├── pyproject.toml
+└── README.md
+```
 
-3. The script will:
-   - Display portfolio statistics over time
-   - Show current position summary
-   - Generate a chart of portfolio value saved as 'portfolio_value.png'
+## Highlights
+- Parses transaction CSVs with fees, share counts, and trade types
+- Running snapshots expose cost basis, unrealised/realised P&L, and total P&L
+- Charting helper writes value and P&L plots to `images/`
 
-## Requirements
-
-- Python 3.6+
-- pandas
-- numpy
-- matplotlib
-
-## Sample Output
-
-The script generates:
-- A table showing portfolio statistics over time
-- A summary of your current position
-- A chart visualizing the unrealized value over time
+## Related Projects
+- [DataScience](../DataScience/README.md)
+- [FinancialMath](../FinancialMath/README.md)
