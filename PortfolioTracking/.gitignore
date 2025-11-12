@@ -138,14 +138,6 @@ dmypy.json
 .DS_Store
 Thumbs.db
 
-# Data Engineering specific
-*.parquet
+# Project specific
 *.csv
-!*.csv
-data/
-logs/
-models/
-checkpoints/
-*.log
-.env.local
-.env.production
+!transactions.csv

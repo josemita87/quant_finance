@@ -12,8 +12,10 @@ wheels/
 # Virtual environments
 .venv
 
+
 # OS specific files
 .DS_Store
 
 # Configuration files
 .env
+.credentials.env

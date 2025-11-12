@@ -138,14 +138,12 @@ dmypy.json
 .DS_Store
 Thumbs.db
 
-# Data Engineering specific
-*.parquet
+# Data Science specific
 *.csv
-!*.csv
-data/
-logs/
+!src/monte_carlo_methods/data/sp500_prices.csv
+*.pkl
+*.joblib
 models/
-checkpoints/
-*.log
-.env.local
-.env.production
+data/raw/
+data/processed/
+notebooks/
