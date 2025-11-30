@@ -6,15 +6,15 @@ from typing import Tuple, TYPE_CHECKING, Any, Optional
 from pydantic import BaseModel, SecretStr, ValidationError
 import anthropic
 
-from llm.models import TokenUsage
-from llm.exceptions import (
+from patent_mcp_server.llm.models import TokenUsage
+from patent_mcp_server.llm.exceptions import (
     LLMConnectionError,
     LLMRateLimitError,
     LLMRequestError,
     LLMResponseError,
     LLMWebSearchError,
 )
-from llm.anthropic.models import AnthropicRequestDTO
+from patent_mcp_server.llm.anthropic.models import AnthropicRequestDTO
 
 if TYPE_CHECKING:
     from llm.anthropic.enums import AnthropicModel

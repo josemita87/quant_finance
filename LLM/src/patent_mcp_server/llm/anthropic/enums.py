@@ -1,6 +1,6 @@
 """Anthropic model definitions and pricing info."""
 from __future__ import annotations
-from llm.enums import LLMModel, ModelInfo
+from patent_mcp_server.llm.enums import LLMModel, ModelInfo
 
 
 class AnthropicModel(LLMModel):

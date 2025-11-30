@@ -7,11 +7,11 @@ import asyncio
 import sys
 from pydantic import BaseModel, Field
 
-from llm.anthropic.api import AnthropicAPI
-from llm.models import LLMRequest
-from server.main import USPTOMCPServer
-from src.settings import settings
-from domain.lawyer import LawyerAgent
+from patent_mcp_server.llm.anthropic.api import AnthropicAPI
+from patent_mcp_server.llm.models import LLMRequest
+from patent_mcp_server.server.main import USPTOMCPServer
+from patent_mcp_server.settings import settings
+from patent_mcp_server.domain.lawyer import LawyerAgent
 
 
 

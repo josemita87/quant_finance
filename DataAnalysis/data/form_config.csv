@@ -1,0 +1,27 @@
+Question Title,Question Type,Options,Required
+What is your age?,TEXT,,True
+What is your gender?,MULTIPLE_CHOICE,"Female, Male, Non-binary, Prefer not to say",True
+Which region do you live in?,DROPDOWN,"Madrid, Barcelona, Valencia, Seville, Bilbao, Málaga, Other",True
+What is your highest level of education?,DROPDOWN,"High School, Bachelors, Masters, PhD",True
+What is your occupation?,DROPDOWN,"Office Worker, Healthcare, Retail, Education, Tech, Service, Manufacturing, Self-Employed, Student, Other",True
+What is your approximate annual income?,DROPDOWN,"<25K, 25K-40K, 40K-60K, 60K-80K, 80K+",True
+What is your skin type?,DROPDOWN,"Very Fair, Fair, Medium, Olive, Brown, Dark",True
+How concerned are you about UVB rays (Burning)?,SCALE,"1, 10",True
+How concerned are you about UVA rays (Aging)?,SCALE,"1, 10",True
+How concerned are you about Blue Light?,SCALE,"1, 10",True
+How concerned are you about Pollution?,SCALE,"1, 10",True
+How concerned are you about Skin Dryness?,SCALE,"1, 10",True
+How sensitive are you to sunscreen texture (stickiness/greasiness)?,SCALE,"1, 10",True
+How price sensitive are you regarding skincare products?,SCALE,"1, 10",True
+How loyal are you to your current skincare brands?,SCALE,"1, 10",True
+How comfortable are you with digital technology/shopping?,SCALE,"1, 10",True
+How often do you currently use sunscreen?,DROPDOWN,"Never, Rarely, Sometimes, Often, Daily",True
+Which brand do you currently use most often?,DROPDOWN,"NIVEA, ISDIN, GARNIER, La Roche-Posay, ECRAN, Store Brand, Other, None",True
+Where do you prefer to buy skincare products?,DROPDOWN,"Pharmacy, Supermarket, Online, Specialty Store, Department Store",True
+What SPF level do you prefer?,MULTIPLE_CHOICE,"15, 30, 50, 50+",True
+What product texture do you prefer?,MULTIPLE_CHOICE,"Cream, Lotion, Fluid, Gel, Spray, Serum",True
+What is the maximum you are willing to pay for a 50ml premium facial sunscreen?,TEXT,,True
+Would you be willing to buy a specific winter sunscreen?,MULTIPLE_CHOICE,"Yes, No",True
+How likely are you to recommend your current sunscreen to a friend?,SCALE,"0, 10",True
+How satisfied are you with your current sunscreen?,SCALE,"1, 10",True
+What prevents you from using sunscreen in winter? (Select all that apply),CHECKBOX,"I don't see enough sun in winter, It is too expensive, I dislike the heavy texture, I forget to apply it, I only need it at the beach, I am unaware of winter sun damage, It is too time consuming",False

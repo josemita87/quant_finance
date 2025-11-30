@@ -8,8 +8,8 @@ from pydantic import SecretStr
 from mcp.server.fastmcp import FastMCP
 from pyngrok import ngrok
 
-from server.api.ppub_uspto import PpubsClient
-from server.api.uspto import ApiUsptoClient
+from patent_mcp_server.server.api.ppub_uspto import PpubsClient
+from patent_mcp_server.server.api.uspto import ApiUsptoClient
 
 
 class USPTOMCPServer:

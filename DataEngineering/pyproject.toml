@@ -1,18 +1,19 @@
-[tool.poetry]
+[project]
 name = "data-engineering-projects"
 version = "0.1.0"
 description = "Data engineering experiments and pipeline blueprints"
-authors = ["Josep Cubedo Macian <136491450+josemita87@users.noreply.github.com>"]
 readme = "README.md"
-packages = []
+authors = [
+    { name = "Josep Cubedo Macian", email = "136491450+josemita87@users.noreply.github.com" }
+]
+requires-python = ">=3.10"
+dependencies = []
 
-[tool.poetry.dependencies]
-python = "^3.10"
+[tool.uv]
+package = false
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.2"
-ruff = "^0.6"
-
-[build-system]
-requires = ["poetry-core>=1.8.0"]
-build-backend = "poetry.core.masonry.api"
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.6",
+]

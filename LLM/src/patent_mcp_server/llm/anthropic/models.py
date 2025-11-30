@@ -1,8 +1,8 @@
 """DTOs and helpers for Anthropic request composition."""
 from __future__ import annotations
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
-from llm.models import LLMRequest
-from llm.anthropic.enums import AnthropicModel
+from patent_mcp_server.llm.models import LLMRequest
+from patent_mcp_server.llm.anthropic.enums import AnthropicModel
 
 
 class AnthropicRequestDTO(LLMRequest):
