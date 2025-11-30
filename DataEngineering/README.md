@@ -5,7 +5,7 @@ Lightweight pointer to public data engineering experiments (Dockerised streaming
 
 ## Notes
 - The original course deliverables live under `ML-course/`. They are intentionally preserved and excluded from automated refactors.
-- New work will follow the same Poetry-based layout once future projects are added.
+- New work will follow the same uv-based layout once future projects are added.
 
 ## Related Projects
 - [MWC](../MWC/README.md)

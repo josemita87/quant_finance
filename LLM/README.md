@@ -41,13 +41,13 @@ ANTHROPIC_VERSION=2023-06-01
 ### 2. Install Dependencies
 
 ```bash
-poetry install
+uv sync
 ```
 
 ### 3. Run the Server
 
 ```bash
-poetry run python src/main.py
+uv run patent-mcp-server
 ```
 
 ## Usage
@@ -89,8 +89,8 @@ The server provides 23 MCP tools for patent search and analysis:
 ## Architecture
 
 ```
-src/main.py                 # Main entry point
-├── .credentials.env        # Credentials configuration
+src/patent_mcp_server/
+├── main.py                 # Main entry point
 ├── server/main.py          # USPTO MCP Server
 ├── llm/anthropic/api.py    # Anthropic API integration
 └── server/api/             # USPTO API clients
@@ -125,15 +125,15 @@ src/main.py                 # Main entry point
 ### Running Tests
 
 ```bash
-poetry run python -m pytest
+uv run pytest
 ```
 
 ### Code Structure
 
-- `src/main.py` - Main application entry point
-- `server/main.py` - USPTO MCP Server implementation
-- `llm/anthropic/api.py` - Anthropic API integration
-- `server/api/` - USPTO API client implementations
+- `src/patent_mcp_server/main.py` - Main application entry point
+- `src/patent_mcp_server/server/main.py` - USPTO MCP Server implementation
+- `src/patent_mcp_server/llm/anthropic/api.py` - Anthropic API integration
+- `src/patent_mcp_server/server/api/` - USPTO API client implementations
 
 ## License
 

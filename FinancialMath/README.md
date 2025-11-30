@@ -5,8 +5,8 @@ Visualise the efficient frontier and capital market line for a synthetic univers
 
 ## Quickstart
 ```bash
-poetry install
-poetry run python -m financial_math.efficient_frontier
+uv sync
+uv run python -m financial_math.efficient_frontier
 ```
 
 ## Features

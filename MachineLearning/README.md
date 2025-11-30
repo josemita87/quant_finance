@@ -5,12 +5,12 @@ Machine learning experiments outside of finance. The showcased module implements
 
 ## Setup
 ```bash
-poetry install
+uv sync
 ```
 
 ## Usage
 ```bash
-poetry run python -q - <<'PY'
+uv run python -q - <<'PY'
 from digit_genetics.mnist_genetic_algorithm import (
     GeneticAlgorithmParameters,
     download_mnist,

@@ -29,8 +29,8 @@ This package powers the Monte Carlo portfolio experiments in the `DataScience` p
 ```bash
 cd ../../..  # repo root
 cd DataScience
-poetry install
-poetry run python -m monte_carlo_methods.main --objective var --budget 100000
+uv sync
+uv run python -m monte_carlo_methods.main --objective var --budget 100000
 ```
 
 ## Programmatic Example

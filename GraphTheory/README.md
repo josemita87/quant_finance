@@ -21,7 +21,7 @@ poetry install
 
 ## Usage Examples
 ```bash
-poetry run python -q - <<'PY'
+uv run python -q - <<'PY'
 from gt_algorithms.connect_four.minimax_agent import ConnectFourBoard, minimax
 
 board = ConnectFourBoard()
@@ -32,7 +32,7 @@ PY
 ```
 
 ```bash
-poetry run python -q - <<'PY'
+uv run python -q - <<'PY'
 from gt_algorithms.epidemic_simulation import (
     EpidemicParameters,
     generate_erdos_renyi_graph,
@@ -51,7 +51,7 @@ PY
 ```
 
 ```bash
-poetry run python -q - <<'PY'
+uv run python -q - <<'PY'
 from gt_algorithms.startup_similarity.pipeline import (
     StartupDataset,
     build_similarity_graph,

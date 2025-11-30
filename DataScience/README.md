@@ -5,12 +5,12 @@ Monte Carlo experimentation for portfolio optimisation. The `monte_carlo_methods
 
 ## Environment
 ```bash
-poetry install
+uv sync
 ```
 
 ## Usage
 ```bash
-poetry run python -m monte_carlo_methods.main --objective var --budget 150000
+uv run python -m monte_carlo_methods.main --objective var --budget 150000
 ```
 
 The CLI defaults to a lightweight configuration (200 simulations and 60 tabu iterations) so it completes quickly. Increase `--simulations` or tweak the source in `main.py` for deeper searches.

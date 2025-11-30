@@ -5,12 +5,12 @@ Command-line utilities for auditing transaction histories. The `portfolio_tracki
 
 ## Setup
 ```bash
-poetry install
+uv sync
 ```
 
 ## Usage
 ```bash
-poetry run python -q - <<'PY'
+uv run python -q - <<'PY'
 from pathlib import Path
 from portfolio_tracking.portfolio import (
     compute_snapshots,
