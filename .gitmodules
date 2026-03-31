@@ -1,3 +1,6 @@
 [submodule "ML-USPTO"]
 	path = ML-USPTO
 	url = https://github.com/josemita87/ML-USPTO.git
+[submodule "ML/ML-USPTO"]
+	path = ML/ML-USPTO
+	url = https://github.com/josemita87/ML-USPTO.git
