@@ -1,3 +1,6 @@
 [submodule "MachineLearning/ML-USPTO"]
 	path = MachineLearning/ML-USPTO
 	url = https://github.com/josemita87/ML-USPTO.git
+[submodule "MachineLearning/prod_inside_out"]
+	path = MachineLearning/prod_inside_out
+	url = git@github.com:josemita87/SecForm4Strategy.git
